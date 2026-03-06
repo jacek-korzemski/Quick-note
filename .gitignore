@@ -1,0 +1,98 @@
+# -----------------------------------------------------------------------------
+# Backend (PHP / Fat-Free)
+# -----------------------------------------------------------------------------
+backend/vendor/
+backend/composer.phar
+backend/data/
+*.db
+*.sqlite
+*.sqlite3
+backend/app/config.local.ini
+backend/app/*.local.ini
+backend/.env
+backend/.env.*
+backend/.env.local
+backend/log/
+backend/tmp/
+backend/cache/
+backend/*.log
+backend/phpunit.xml
+backend/phpunit.result.xml
+backend/.phpunit.result.cache
+backend/coverage/
+
+# -----------------------------------------------------------------------------
+# Frontend (Node / React / Vite)
+# -----------------------------------------------------------------------------
+frontend/node_modules/
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/pnpm-debug.log*
+frontend/.pnpm-debug.log*
+frontend/dist/
+frontend/build/
+frontend/.vite/
+frontend/*.tsbuildinfo
+frontend/tsconfig.tsbuildinfo
+frontend/tsconfig.node.tsbuildinfo
+frontend/.env
+frontend/.env.*
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+frontend/coverage/
+frontend/.nyc_output/
+
+# -----------------------------------------------------------------------------
+# Wspólne
+# -----------------------------------------------------------------------------
+.env
+.env.*
+.env.local
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+secrets/
+.secrets/
+*.secret
+
+# -----------------------------------------------------------------------------
+# System operacyjny
+# -----------------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# -----------------------------------------------------------------------------
+# IDE / edytory
+# -----------------------------------------------------------------------------
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# -----------------------------------------------------------------------------
+# Różne / backup / tymczasowe
+# -----------------------------------------------------------------------------
+*.bak
+*.tmp
+*.temp
+*.backup
+*.orig
+.cache/
