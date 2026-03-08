@@ -1,4 +1,6 @@
-const API_BASE = '/api/categories';
+import { API_BASE_URL } from '@/config';
+
+const API_BASE = `${API_BASE_URL}/api/categories`;
 
 export interface Category {
   id: number;

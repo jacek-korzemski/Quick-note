@@ -1,4 +1,6 @@
-const API_BASE = '/api/auth';
+import { API_BASE_URL } from '@/config';
+
+const API_BASE = `${API_BASE_URL}/api/auth`;
 
 export interface User {
   id: number;

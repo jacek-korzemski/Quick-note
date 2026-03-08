@@ -4,6 +4,11 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
+  base: process.env.VITE_BASE ?? '/',
+  build: {
+    outDir: process.env.VITE_OUT_DIR ?? 'dist',
+    emptyOutDir: true,
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -15,7 +20,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:8080',
+        target: process.env.VITE_API_BASE ?? 'http://localhost:8080',
         changeOrigin: true,
       },
     },
