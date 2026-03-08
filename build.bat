@@ -84,7 +84,9 @@ cd ..
 echo.
 echo [3/3] Kopiowanie backendu do build\backend...
 if exist "build\backend" rmdir /s /q "build\backend"
-xcopy /E /I /Y /Q "backend" "build\backend" >nul
+echo .db> "%TEMP%\notes_xcopy_exclude.txt"
+xcopy /E /I /Y /Q /EXCLUDE:%TEMP%\notes_xcopy_exclude.txt "backend" "build\backend" >nul
+del "%TEMP%\notes_xcopy_exclude.txt" 2>nul
 if errorlevel 1 (
   echo Błąd kopiowania backendu.
   pause
