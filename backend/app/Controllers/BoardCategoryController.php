@@ -153,8 +153,9 @@ class BoardCategoryController {
         if ($parentId !== null) {
             $db->exec('UPDATE boards SET board_category_id = ? WHERE board_category_id = ?', [$parentId, $id]);
         } else {
+            // Blokuj tylko gdy są aktywne tablice (zarchiwizowane są odpięte od kategorii)
             $board = new Board($f3->get('DB'));
-            $board->load(['board_category_id = ?', $id]);
+            $board->load(['board_category_id = ? AND archived_at IS NULL', $id]);
             if (!$board->dry()) {
                 $this->json($f3, ['error' => 'Przenieś tablice do innej kategorii przed usunięciem.'], 400);
                 return;

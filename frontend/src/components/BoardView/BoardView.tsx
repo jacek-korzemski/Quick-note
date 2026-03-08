@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import {
   DndContext,
@@ -12,7 +12,9 @@ import { Button } from '@/components/Button/Button';
 import { boardsApi, type Board } from '@/api/boards';
 import { tasksApi, type Task, type TaskStatus } from '@/api/tasks';
 import TaskEditorModal from '@/components/TaskEditorModal/TaskEditorModal';
-import { DroppableColumn } from './DroppableColumn';
+import { DroppableColumn } from '@/components/BoardView/DroppableColumn';
+import ConfirmDialog from '@/components/Modal/ConfirmDialog';
+import CopyBoardModal from '@/components/CopyBoardModal/CopyBoardModal';
 
 const COLUMN_IDS: TaskStatus[] = ['todo', 'in_progress', 'verification', 'done'];
 const COLUMN_TITLES: Record<TaskStatus, string> = {
@@ -44,15 +46,22 @@ const EmptyState = styled.div`
   font-size: ${({ theme }) => theme.fontSize.md};
 `;
 
+export const BOARD_REFRESH_EVENT = 'boards-refresh';
+
 const BoardView: React.FC = () => {
   const { boardId } = useParams<{ boardId: string }>();
+  const navigate = useNavigate();
   const [board, setBoard] = useState<Board | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false);
+  const [archiveLoading, setArchiveLoading] = useState(false);
+  const [copyModalOpen, setCopyModalOpen] = useState(false);
 
   const id = boardId ? Number(boardId) : 0;
+  const isArchived = board != null && board.archived_at != null && board.archived_at !== '';
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -75,12 +84,9 @@ const BoardView: React.FC = () => {
     let cancelled = false;
     setLoading(true);
     boardsApi
-      .getAll()
-      .then(({ boards }) => {
-        if (!cancelled) {
-          const b = boards.find((x) => x.id === id) ?? null;
-          setBoard(b);
-        }
+      .getById(id)
+      .then(({ board: b }) => {
+        if (!cancelled) setBoard(b);
       })
       .catch(() => {
         if (!cancelled) setBoard(null);
@@ -117,6 +123,21 @@ const BoardView: React.FC = () => {
     setTaskModalOpen(false);
     setEditingTask(null);
     refreshTasks();
+  };
+
+  const handleArchiveConfirm = async () => {
+    if (!id) return;
+    setArchiveLoading(true);
+    try {
+      await boardsApi.archive(id);
+      setArchiveConfirmOpen(false);
+      window.dispatchEvent(new CustomEvent(BOARD_REFRESH_EVENT));
+      navigate('/');
+    } catch {
+      // error could be shown via snackbar
+    } finally {
+      setArchiveLoading(false);
+    }
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -186,11 +207,23 @@ const BoardView: React.FC = () => {
     <>
       <BoardHeader>
         <h1>{board.name}</h1>
-        <Button variant="primary" onClick={handleAddTask}>
-          Dodaj zadanie
-        </Button>
+        {!isArchived && (
+          <>
+            <Button variant="primary" onClick={handleAddTask}>
+              Dodaj zadanie
+            </Button>
+            <Button variant="secondary" onClick={() => setArchiveConfirmOpen(true)}>
+              Zakończ projekt
+            </Button>
+          </>
+        )}
+        {isArchived && (
+          <Button variant="primary" onClick={() => setCopyModalOpen(true)}>
+            Stwórz kopię
+          </Button>
+        )}
       </BoardHeader>
-      <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+      <DndContext sensors={sensors} onDragEnd={isArchived ? () => {} : handleDragEnd}>
         <ColumnsGrid>
           {COLUMN_IDS.map((status) => (
             <DroppableColumn
@@ -199,6 +232,7 @@ const BoardView: React.FC = () => {
               title={COLUMN_TITLES[status]}
               tasks={tasksByStatus[status]}
               onTaskClick={handleEditTask}
+              readOnly={isArchived}
             />
           ))}
         </ColumnsGrid>
@@ -212,6 +246,29 @@ const BoardView: React.FC = () => {
         onSuccess={handleTaskModalSuccess}
         boardId={id}
         task={editingTask}
+        readOnly={isArchived}
+      />
+      <ConfirmDialog
+        isOpen={archiveConfirmOpen}
+        onConfirm={handleArchiveConfirm}
+        onCancel={() => !archiveLoading && setArchiveConfirmOpen(false)}
+        title="Zakończ projekt"
+        message="Czy na pewno chcesz zakończyć ten projekt? Tablica zostanie przeniesiona do archiwum i będzie tylko do odczytu."
+        confirmText="Zakończ"
+        cancelText="Anuluj"
+        variant="danger"
+        loading={archiveLoading}
+      />
+      <CopyBoardModal
+        isOpen={copyModalOpen}
+        onClose={() => setCopyModalOpen(false)}
+        onSuccess={() => {
+          setCopyModalOpen(false);
+          window.dispatchEvent(new CustomEvent(BOARD_REFRESH_EVENT));
+        }}
+        boardId={id}
+        boardName={board.name}
+        tasks={tasks}
       />
     </>
   );

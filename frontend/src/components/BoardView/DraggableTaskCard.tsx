@@ -3,20 +3,20 @@ import { CSS } from '@dnd-kit/utilities';
 import type { Task } from '@/api/tasks';
 import styled from 'styled-components';
 
-const TaskCard = styled.div<{ $isDragging?: boolean; $isOver?: boolean }>`
+const TaskCard = styled.div<{ $isDragging?: boolean; $isOver?: boolean; $readOnly?: boolean }>`
   padding: ${({ theme }) => theme.spacing.sm};
   margin-bottom: ${({ theme }) => theme.spacing.xs};
   background: ${({ theme }) => theme.colors.background};
   border: 1px solid
     ${({ theme, $isOver }) => ($isOver ? theme.colors.borderFocus : theme.colors.border)};
   border-radius: ${({ theme }) => theme.borderRadius.xs};
-  cursor: grab;
+  cursor: ${({ $readOnly }) => ($readOnly ? 'default' : 'grab')};
   opacity: ${({ $isDragging }) => ($isDragging ? 0.5 : 1)};
   &:hover {
     border-color: ${({ theme }) => theme.colors.borderLight};
   }
   &:active {
-    cursor: grabbing;
+    cursor: ${({ $readOnly }) => ($readOnly ? 'default' : 'grabbing')};
   }
 `;
 
@@ -43,15 +43,17 @@ const DifficultyBadge = styled.span`
 interface DraggableTaskCardProps {
   task: Task;
   onClick: () => void;
+  readOnly?: boolean;
 }
 
-export function DraggableTaskCard({ task, onClick }: DraggableTaskCardProps) {
+export function DraggableTaskCard({ task, onClick, readOnly }: DraggableTaskCardProps) {
   const id = `task-${task.id}`;
   const { attributes, listeners, setNodeRef: setDragRef, transform, isDragging } = useDraggable({
     id,
     data: { task },
+    disabled: readOnly,
   });
-  const { isOver, setNodeRef: setDropRef } = useDroppable({ id });
+  const { isOver, setNodeRef: setDropRef } = useDroppable({ id, disabled: readOnly });
   const setNodeRef = (el: HTMLDivElement | null) => {
     setDragRef(el);
     setDropRef(el);
@@ -69,9 +71,9 @@ export function DraggableTaskCard({ task, onClick }: DraggableTaskCardProps) {
       style={style}
       $isDragging={isDragging}
       $isOver={isOver}
+      $readOnly={readOnly}
       onClick={onClick}
-      {...listeners}
-      {...attributes}
+      {...(readOnly ? {} : { ...listeners, ...attributes })}
     >
       <TaskCardTitle>{task.title}</TaskCardTitle>
       <TaskCardMeta>

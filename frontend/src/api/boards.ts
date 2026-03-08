@@ -5,8 +5,9 @@ const API_BASE = `${API_BASE_URL}/api/boards`;
 export interface Board {
   id: number;
   name: string;
-  board_category_id: number;
+  board_category_id: number | null;
   user_id: number;
+  archived_at?: string | null;
 }
 
 export interface ApiError {
@@ -36,9 +37,16 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const boardsApi = {
-  getAll(boardCategoryId?: number | null) {
-    const params = boardCategoryId != null ? `?board_category_id=${boardCategoryId}` : '';
-    return request<{ boards: Board[] }>(params);
+  getAll(boardCategoryId?: number | null, archived?: boolean) {
+    const search = new URLSearchParams();
+    if (boardCategoryId != null) search.set('board_category_id', String(boardCategoryId));
+    if (archived === true) search.set('archived', '1');
+    const q = search.toString();
+    return request<{ boards: Board[] }>(q ? `?${q}` : '');
+  },
+
+  getById(id: number) {
+    return request<{ board: Board }>(`/${id}`);
   },
 
   create(data: { name: string; board_category_id: number }) {
@@ -58,6 +66,22 @@ export const boardsApi = {
   delete(id: number) {
     return request<{ message: string }>(`/${id}`, {
       method: 'DELETE',
+    });
+  },
+
+  archive(id: number) {
+    return request<{ board: Board }>(`/${id}/archive`, {
+      method: 'POST',
+    });
+  },
+
+  copy(
+    id: number,
+    data: { board_category_id: number; task_ids: number[] }
+  ) {
+    return request<{ board: Board }>(`/${id}/copy`, {
+      method: 'POST',
+      body: JSON.stringify(data),
     });
   },
 };

@@ -187,6 +187,7 @@ const SidebarActions = () => {
   const { tree, selectedCategoryId, setSelectedCategoryId, refreshCategories } = useCategories();
   const { tree: boardCategoryTree, refreshBoardCategories } = useBoardCategories();
   const [boards, setBoards] = useState<Board[]>([]);
+  const [archivedBoards, setArchivedBoards] = useState<Board[]>([]);
   const [editorOpen, setEditorOpen] = useState(false);
   const [categoryEditorOpen, setCategoryEditorOpen] = useState(false);
   const [deleteCategory, setDeleteCategory] = useState<CategoryTreeNode | null>(null);
@@ -201,10 +202,15 @@ const SidebarActions = () => {
   const refreshBoards = useCallback(async () => {
     if (!user) return;
     try {
-      const { boards: data } = await boardsApi.getAll();
-      setBoards(data);
+      const [{ boards: active }, { boards: archived }] = await Promise.all([
+        boardsApi.getAll(),
+        boardsApi.getAll(undefined, true),
+      ]);
+      setBoards(active);
+      setArchivedBoards(archived);
     } catch {
       setBoards([]);
+      setArchivedBoards([]);
     }
   }, [user]);
 
@@ -212,13 +218,21 @@ const SidebarActions = () => {
     if (user) refreshBoards();
   }, [user, refreshBoards]);
 
-  const boardsByCategory: Record<number, Board[]> = boards.reduce<Record<number, Board[]>>(
-    (acc, b) => {
-      (acc[b.board_category_id] = acc[b.board_category_id] ?? []).push(b);
-      return acc;
-    },
-    {}
-  );
+  useEffect(() => {
+    const handler = () => refreshBoards();
+    window.addEventListener('boards-refresh', handler);
+    return () => window.removeEventListener('boards-refresh', handler);
+  }, [refreshBoards]);
+
+  const boardsByCategory: Record<number, Board[]> = boards
+    .filter((b) => b.board_category_id != null)
+    .reduce<Record<number, Board[]>>(
+      (acc, b) => {
+        (acc[b.board_category_id!] = acc[b.board_category_id!] ?? []).push(b);
+        return acc;
+      },
+      {}
+    );
 
   const handleDeleteCategory = async () => {
     if (!deleteCategory) return;
@@ -421,6 +435,24 @@ const SidebarActions = () => {
           variant="danger"
           loading={deleteBoardLoading}
         />
+      </SidebarActionsWrapper>
+      <SidebarActionsWrapper flex>
+        <h2 style={{ width: '100%' }}>Archiwum</h2>
+        <CategoriesList>
+          {archivedBoards.length === 0 ? (
+            <div style={{ padding: '4px 0', fontSize: 13, color: 'var(--colors-textSecondary)' }}>
+              Brak zarchiwizowanych tablic
+            </div>
+          ) : (
+            <BoardsList>
+              {archivedBoards.map((board) => (
+                <BoardLink key={board.id} to={`/board/${board.id}`}>
+                  {board.name}
+                </BoardLink>
+              ))}
+            </BoardsList>
+          )}
+        </CategoriesList>
       </SidebarActionsWrapper>
     </>
   );

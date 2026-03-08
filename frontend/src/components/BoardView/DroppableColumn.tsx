@@ -33,11 +33,19 @@ interface DroppableColumnProps {
   title: string;
   tasks: Task[];
   onTaskClick: (task: Task) => void;
+  readOnly?: boolean;
 }
 
-export function DroppableColumn({ status, title, tasks, onTaskClick }: DroppableColumnProps) {
+export function DroppableColumn({
+  status,
+  title,
+  tasks,
+  onTaskClick,
+  readOnly,
+}: DroppableColumnProps) {
   const { isOver, setNodeRef } = useDroppable({
     id: status,
+    disabled: readOnly,
   });
 
   return (
@@ -45,7 +53,12 @@ export function DroppableColumn({ status, title, tasks, onTaskClick }: Droppable
       <ColumnTitle>{title}</ColumnTitle>
       <TaskCards>
         {tasks.map((task) => (
-          <DraggableTaskCard key={task.id} task={task} onClick={() => onTaskClick(task)} />
+          <DraggableTaskCard
+            key={task.id}
+            task={task}
+            onClick={() => onTaskClick(task)}
+            readOnly={readOnly}
+          />
         ))}
       </TaskCards>
     </Column>

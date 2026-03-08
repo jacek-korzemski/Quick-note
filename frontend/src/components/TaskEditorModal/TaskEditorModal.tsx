@@ -60,6 +60,7 @@ interface TaskEditorModalProps {
   onSuccess: () => void;
   boardId: number;
   task: Task | null;
+  readOnly?: boolean;
 }
 
 const TaskEditorModal: React.FC<TaskEditorModalProps> = ({
@@ -68,6 +69,7 @@ const TaskEditorModal: React.FC<TaskEditorModalProps> = ({
   onSuccess,
   boardId,
   task,
+  readOnly = false,
 }) => {
   const isEdit = !!task;
   const [title, setTitle] = useState('');
@@ -101,7 +103,7 @@ const TaskEditorModal: React.FC<TaskEditorModalProps> = ({
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (loading) return;
+    if (loading || readOnly) return;
     setError('');
     setLoading(true);
 
@@ -136,23 +138,31 @@ const TaskEditorModal: React.FC<TaskEditorModalProps> = ({
     });
   };
 
+  const modalTitle = readOnly ? 'Podgląd zadania' : isEdit ? 'Edytuj zadanie' : 'Nowe zadanie';
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
-      title={isEdit ? 'Edytuj zadanie' : 'Nowe zadanie'}
+      title={modalTitle}
       maxWidth="520px"
       width="520px"
       loading={loading}
       footer={
-        <>
-          <StyledButton type="button" $variant="secondary" onClick={handleClose} disabled={loading}>
-            Anuluj
+        readOnly ? (
+          <StyledButton type="button" $variant="secondary" onClick={handleClose}>
+            Zamknij
           </StyledButton>
-          <Button type="submit" form="task-editor-form" variant="primary" loading={loading}>
-            {isEdit ? 'Zapisz' : 'Utwórz'}
-          </Button>
-        </>
+        ) : (
+          <>
+            <StyledButton type="button" $variant="secondary" onClick={handleClose} disabled={loading}>
+              Anuluj
+            </StyledButton>
+            <Button type="submit" form="task-editor-form" variant="primary" loading={loading}>
+              {isEdit ? 'Zapisz' : 'Utwórz'}
+            </Button>
+          </>
+        )
       }
     >
       <form id="task-editor-form" onSubmit={handleSubmit}>
@@ -169,7 +179,8 @@ const TaskEditorModal: React.FC<TaskEditorModalProps> = ({
           placeholder="Tytuł zadania"
           fullWidth
           required
-          autoFocus
+          autoFocus={!readOnly}
+          disabled={readOnly}
         />
 
         <Textarea
@@ -179,6 +190,7 @@ const TaskEditorModal: React.FC<TaskEditorModalProps> = ({
           placeholder="Opis zadania..."
           fullWidth
           rows={4}
+          disabled={readOnly}
         />
 
         <div style={{ marginTop: 8 }}>
@@ -188,6 +200,7 @@ const TaskEditorModal: React.FC<TaskEditorModalProps> = ({
             value={difficulty}
             onChange={(e) => setDifficulty(Number(e.target.value) || 0)}
             fullWidth
+            disabled={readOnly}
           />
         </div>
 

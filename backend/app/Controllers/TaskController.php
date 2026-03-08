@@ -43,6 +43,14 @@ class TaskController {
         return $board->dry() ? null : $board;
     }
 
+    private function ensureBoardNotArchived(\Base $f3, Board $board): bool {
+        if (isset($board->archived_at) && (string) $board->archived_at !== '') {
+            $this->json($f3, ['error' => 'Tablica jest zarchiwizowana i tylko do odczytu.'], 403);
+            return false;
+        }
+        return true;
+    }
+
     public function index(\Base $f3, array $params): void {
         $user = $this->getCurrentUser($f3);
         if (!$user) {
@@ -69,8 +77,12 @@ class TaskController {
         }
 
         $boardId = (int) ($params['boardId'] ?? 0);
-        if (!$boardId || !$this->ensureBoardAccess($f3, $boardId, (int) $user->id)) {
+        $board = $boardId ? $this->ensureBoardAccess($f3, $boardId, (int) $user->id) : null;
+        if (!$boardId || !$board) {
             $this->json($f3, ['error' => 'Tablica nie została znaleziona.'], 404);
+            return;
+        }
+        if (!$this->ensureBoardNotArchived($f3, $board)) {
             return;
         }
 
@@ -114,6 +126,14 @@ class TaskController {
         $id = (int) ($params['id'] ?? 0);
         if (!$boardId || !$id) {
             $this->json($f3, ['error' => 'Nieprawidłowe ID.'], 400);
+            return;
+        }
+
+        $board = $this->ensureBoardAccess($f3, $boardId, (int) $user->id);
+        if (!$board || !$this->ensureBoardNotArchived($f3, $board)) {
+            if (!$board) {
+                $this->json($f3, ['error' => 'Tablica nie została znaleziona.'], 404);
+            }
             return;
         }
 
@@ -176,8 +196,12 @@ class TaskController {
         }
 
         $boardId = (int) ($params['boardId'] ?? 0);
-        if (!$boardId || !$this->ensureBoardAccess($f3, $boardId, (int) $user->id)) {
+        $board = $boardId ? $this->ensureBoardAccess($f3, $boardId, (int) $user->id) : null;
+        if (!$boardId || !$board) {
             $this->json($f3, ['error' => 'Tablica nie została znaleziona.'], 404);
+            return;
+        }
+        if (!$this->ensureBoardNotArchived($f3, $board)) {
             return;
         }
 
@@ -221,6 +245,14 @@ class TaskController {
         $id = (int) ($params['id'] ?? 0);
         if (!$boardId || !$id) {
             $this->json($f3, ['error' => 'Nieprawidłowe ID.'], 400);
+            return;
+        }
+
+        $board = $this->ensureBoardAccess($f3, $boardId, (int) $user->id);
+        if (!$board || !$this->ensureBoardNotArchived($f3, $board)) {
+            if (!$board) {
+                $this->json($f3, ['error' => 'Tablica nie została znaleziona.'], 404);
+            }
             return;
         }
 

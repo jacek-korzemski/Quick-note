@@ -94,6 +94,43 @@ try {
         throw $e;
     }
 }
+try {
+    $db->exec("ALTER TABLE boards ADD COLUMN archived_at TEXT");
+} catch (Exception $e) {
+    if (strpos($e->getMessage(), 'duplicate column name') === false) {
+        throw $e;
+    }
+}
+
+// Migracja: board_category_id nullable (archiwum jest płaskie, bez kategorii)
+try {
+    $info = $db->exec('PRAGMA table_info(boards)');
+    $boardCategoryNotNull = true;
+    foreach ($info as $col) {
+        if ($col['name'] === 'board_category_id' && (int) $col['notnull'] === 0) {
+            $boardCategoryNotNull = false;
+            break;
+        }
+    }
+    if ($boardCategoryNotNull) {
+        $db->exec('CREATE TABLE boards_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            board_category_id INTEGER REFERENCES board_categories(id),
+            user_id INTEGER NOT NULL,
+            archived_at TEXT,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )');
+        $db->exec('INSERT INTO boards_new (id, name, board_category_id, user_id, archived_at)
+            SELECT id, name, CASE WHEN archived_at IS NOT NULL THEN NULL ELSE board_category_id END, user_id, archived_at FROM boards');
+        $db->exec('DROP TABLE boards');
+        $db->exec('ALTER TABLE boards_new RENAME TO boards');
+    }
+} catch (Exception $e) {
+    if (strpos($e->getMessage(), 'already exists') === false && strpos($e->getMessage(), 'duplicate') === false) {
+        throw $e;
+    }
+}
 
 $f3->set('CORS.origin', '*');
 
@@ -126,9 +163,12 @@ $f3->route('PUT    /api/board-categories/@id', 'BoardCategoryController->update'
 $f3->route('DELETE /api/board-categories/@id', 'BoardCategoryController->delete');
 
 $f3->route('GET    /api/boards', 'BoardController->index');
+$f3->route('GET    /api/boards/@id', 'BoardController->getOne');
 $f3->route('POST   /api/boards', 'BoardController->create');
 $f3->route('PUT    /api/boards/@id', 'BoardController->update');
 $f3->route('DELETE /api/boards/@id', 'BoardController->delete');
+$f3->route('POST   /api/boards/@id/archive', 'BoardController->archive');
+$f3->route('POST   /api/boards/@id/copy', 'BoardController->copy');
 
 $f3->route('GET    /api/boards/@boardId/tasks', 'TaskController->index');
 $f3->route('POST   /api/boards/@boardId/tasks', 'TaskController->create');
