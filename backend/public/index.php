@@ -1,5 +1,15 @@
 <?php
 
+// CORS: send headers for every request so preflight and actual requests are allowed
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type, Authorization');
+header('Access-Control-Max-Age: 3600');
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit;
+}
+
 $f3 = require('../base.php');
 $f3->config('../app/config.ini');
 
@@ -34,11 +44,51 @@ $db->exec([
         user_id INTEGER NOT NULL,
         category_id INTEGER REFERENCES categories(id),
         FOREIGN KEY (user_id) REFERENCES users(id)
+    )",
+    "CREATE TABLE IF NOT EXISTS board_categories (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        parent_id INTEGER,
+        user_id INTEGER NOT NULL,
+        FOREIGN KEY (parent_id) REFERENCES board_categories(id),
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    )",
+    "CREATE TABLE IF NOT EXISTS boards (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        board_category_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        FOREIGN KEY (board_category_id) REFERENCES board_categories(id),
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    )",
+    "CREATE TABLE IF NOT EXISTS tasks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        board_id INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        content TEXT,
+        difficulty INTEGER DEFAULT 0,
+        created_at TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'todo',
+        FOREIGN KEY (board_id) REFERENCES boards(id)
+    )",
+    "CREATE TABLE IF NOT EXISTS task_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        task_id INTEGER NOT NULL,
+        changed_at TEXT NOT NULL,
+        description TEXT NOT NULL,
+        FOREIGN KEY (task_id) REFERENCES tasks(id)
     )"
 ]);
 
 try {
     $db->exec("ALTER TABLE notes ADD COLUMN category_id INTEGER REFERENCES categories(id)");
+} catch (Exception $e) {
+    if (strpos($e->getMessage(), 'duplicate column name') === false) {
+        throw $e;
+    }
+}
+try {
+    $db->exec("ALTER TABLE tasks ADD COLUMN position INTEGER NOT NULL DEFAULT 0");
 } catch (Exception $e) {
     if (strpos($e->getMessage(), 'duplicate column name') === false) {
         throw $e;
@@ -69,5 +119,21 @@ $f3->route('GET    /api/categories', 'CategoryController->index');
 $f3->route('POST   /api/categories', 'CategoryController->create');
 $f3->route('PUT    /api/categories/@id', 'CategoryController->update');
 $f3->route('DELETE /api/categories/@id', 'CategoryController->delete');
+
+$f3->route('GET    /api/board-categories', 'BoardCategoryController->index');
+$f3->route('POST   /api/board-categories', 'BoardCategoryController->create');
+$f3->route('PUT    /api/board-categories/@id', 'BoardCategoryController->update');
+$f3->route('DELETE /api/board-categories/@id', 'BoardCategoryController->delete');
+
+$f3->route('GET    /api/boards', 'BoardController->index');
+$f3->route('POST   /api/boards', 'BoardController->create');
+$f3->route('PUT    /api/boards/@id', 'BoardController->update');
+$f3->route('DELETE /api/boards/@id', 'BoardController->delete');
+
+$f3->route('GET    /api/boards/@boardId/tasks', 'TaskController->index');
+$f3->route('POST   /api/boards/@boardId/tasks', 'TaskController->create');
+$f3->route('PUT    /api/boards/@boardId/tasks/reorder', 'TaskController->reorder');
+$f3->route('PUT    /api/boards/@boardId/tasks/@id', 'TaskController->update');
+$f3->route('DELETE /api/boards/@boardId/tasks/@id', 'TaskController->delete');
 
 $f3->run();
