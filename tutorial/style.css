@@ -1,0 +1,174 @@
+/* Tutorial – stylowanie pod czytelność */
+
+:root {
+  --text: #1a1a1a;
+  --text-muted: #444;
+  --bg: #fafafa;
+  --code-bg: #f0f0f0;
+  --code-border: #ccc;
+  --link: #0066cc;
+  --link-visited: #551a8b;
+  --tip-bg: #e8f4e8;
+  --tip-border: #7cb87c;
+  --warning-bg: #fff8e8;
+  --warning-border: #c9a227;
+  --max-width: 52rem;
+  --line-height: 1.6;
+  --font-sans: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text: #e0e0e0;
+    --text-muted: #b0b0b0;
+    --bg: #1a1a1a;
+    --code-bg: #2a2a2a;
+    --code-border: #444;
+    --link: #6eb3f7;
+    --tip-bg: #1e2e1e;
+    --tip-border: #5a8a5a;
+    --warning-bg: #2e2a1e;
+    --warning-border: #8a7a3a;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 1.5rem 1rem;
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: var(--line-height);
+  color: var(--text);
+  background: var(--bg);
+}
+
+.tutorial {
+  max-width: var(--max-width);
+  margin: 0 auto;
+}
+
+.tutorial header {
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--code-border);
+}
+
+.tutorial .subtitle {
+  margin: 0.25rem 0 0;
+  font-size: 1.05rem;
+  color: var(--text-muted);
+}
+
+.tutorial h1 {
+  margin: 0;
+  font-size: 1.75rem;
+  font-weight: 700;
+}
+
+.tutorial h2 {
+  margin: 2rem 0 0.75rem;
+  font-size: 1.35rem;
+  font-weight: 600;
+}
+
+.tutorial h2:first-of-type {
+  margin-top: 0;
+}
+
+.tutorial h3 {
+  margin: 1.25rem 0 0.5rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.tutorial p,
+.tutorial ul,
+.tutorial ol {
+  margin: 0.5rem 0 1rem;
+}
+
+.tutorial ul,
+.tutorial ol {
+  padding-left: 1.5rem;
+}
+
+.tutorial li {
+  margin: 0.25rem 0;
+}
+
+.tutorial a {
+  color: var(--link);
+  text-decoration: none;
+}
+
+.tutorial a:visited {
+  color: var(--link-visited);
+}
+
+.tutorial a:hover {
+  text-decoration: underline;
+}
+
+.tutorial code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  padding: 0.15em 0.4em;
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
+  border-radius: 3px;
+}
+
+.tutorial pre {
+  margin: 1rem 0;
+  padding: 1rem;
+  overflow-x: auto;
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.tutorial pre code {
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 0;
+  font-size: inherit;
+}
+
+.tutorial .section {
+  margin-bottom: 2rem;
+}
+
+.tutorial .tip,
+.tutorial .warning {
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+  border-left: 4px solid;
+  border-radius: 0 4px 4px 0;
+}
+
+.tutorial .tip {
+  background: var(--tip-bg);
+  border-color: var(--tip-border);
+}
+
+.tutorial .warning {
+  background: var(--warning-bg);
+  border-color: var(--warning-border);
+}
+
+.tutorial .tip strong,
+.tutorial .warning strong {
+  display: block;
+  margin-bottom: 0.25rem;
+}

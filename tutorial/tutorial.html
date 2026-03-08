@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tutorial: Aplikacja od zera – backend PHP F3 + frontend React + Vite</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <article class="tutorial">
+    <header>
+      <h1>Tutorial: Aplikacja od zera</h1>
+      <p class="subtitle">Backend Fat-Free PHP + Frontend React + Vite – notatki, użytkownicy, logowanie i tablice kanban (Jira)</p>
+    </header>
+
+    <!-- ========== 1. WSTĘP ========== -->
+    <section class="section" id="wstep">
+      <h2>1. Wstęp</h2>
+      <p>W tym tutorialu zbudujesz od zera aplikację: <strong>notatki z rejestracją i logowaniem</strong> oraz <strong>tablice kanban (w stylu Jiry)</strong> z przeciąganiem zadań. Backend to API w JSON (Fat-Free Framework, PHP), frontend to SPA (React + Vite, TypeScript). Po przejściu wszystkich kroków będziesz miał działającą wersję z notatkami, użytkownikami i tablicami z zadaniami do przeciągania między kolumnami.</p>
+
+      <h3>Wymagania</h3>
+      <ul>
+        <li>PHP 7.2+ (z rozszerzeniami: pdo_sqlite, json, mbstring)</li>
+        <li>Node.js (LTS) oraz npm lub pnpm</li>
+        <li>Przeglądarka i edytor kodu</li>
+      </ul>
+
+      <h3>Przegląd sekcji</h3>
+      <ol>
+        <li><a href="#backend">Backend – postawienie od zera</a></li>
+        <li><a href="#frontend">Frontend – postawienie od zera</a></li>
+        <li><a href="#user-backend">Model i kontroler użytkownika (backend)</a></li>
+        <li><a href="#auth-frontend">Autentykacja po stronie frontendu</a></li>
+        <li><a href="#notes">Kolejne endpointy i komponenty (Notatki)</a></li>
+        <li><a href="#kanban">Tablice kanban (aspekt Jira)</a></li>
+        <li><a href="#polaczenie">Łączenie z backendem – podsumowanie</a></li>
+        <li><a href="#debugowanie">Debugowanie i typowe błędy</a></li>
+      </ol>
+    </section>
+
+    <!-- ========== 2. BACKEND ========== -->
+    <section class="section" id="backend">
+      <h2>2. Backend – postawienie od zera</h2>
+
+      <h3>Struktura katalogów</h3>
+      <p>Utwórz w projekcie folder <code>backend</code> i wewnątrz:</p>
+      <ul>
+        <li><code>backend/public/</code> – punkt wejścia HTTP (tu będzie <code>index.php</code>)</li>
+        <li><code>backend/app/</code> – konfiguracja i logika aplikacji</li>
+        <li><code>backend/app/Controllers/</code> – kontrolery</li>
+        <li><code>backend/app/Models/</code> – modele</li>
+        <li><code>backend/data/</code> – plik bazy SQLite (np. <code>notes.db</code>)</li>
+      </ul>
+
+      <h3>Fat-Free Framework</h3>
+      <p>Pobierz rdzeń F3. Opcja bez Composera: skopiuj plik <code>base.php</code> z repozytorium <a href="https://github.com/bcosca/fatfree-core">fatfree-core</a> do <code>backend/</code> (tak aby ścieżka była <code>backend/base.php</code>). Opcja z Composerem:</p>
+      <pre><code>cd backend
+composer require bcosca/fatfree-core</code></pre>
+      <p>Wtedy zamiast <code>require '../base.php'</code> użyjesz <code>require '../vendor/autoload.php'</code> i <code>$f3 = \Base::instance();</code>.</p>
+
+      <h3>Plik wejścia <code>public/index.php</code></h3>
+      <p>Wszystkie żądania do API muszą trafiać do tego pliku. Na początku ustawiamy CORS (potrzebne, gdy frontend jest na innym porcie lub domenie), potem ładujemy framework, konfigurację, bazę i trasy.</p>
+      <pre><code>&lt;?php
+// === CORS: pozwala przeglądarce na requesty z innej domeny/portu (np. front na :5173, API na :8080) ===
+header('Access-Control-Allow-Origin: *');           // które origin mogą wywołać API
+header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type, Authorization');  // np. Bearer token
+header('Access-Control-Max-Age: 3600');              // cache odpowiedzi preflight (OPTIONS) na 1h
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {      // preflight: przeglądarka pyta „czy mogę wysłać POST z Authorization?”
+    http_response_code(200);
+    exit;                                            // nie uruchamiamy F3 – tylko nagłówki
+}
+
+// === Bootstrap Fat-Free: załaduj rdzeń i konfigurację ===
+$f3 = require('../base.php');                        // zwraca instancję Base (singleton)
+$f3->config('../app/config.ini');                   // DEBUG, AUTOLOAD, CORS itd.
+
+// === Baza SQLite: jedna plikowa baza w data/notes.db ===
+$db = new \DB\SQL('sqlite:' . realpath('../data') . '/notes.db');
+$f3->set('DB', $db);                                 // kontrolery biorą $f3->get('DB')
+
+// === Tworzenie tabel: IF NOT EXISTS – bezpieczne przy każdym uruchomieniu ===
+$db->exec([
+    "CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL UNIQUE,
+        email TEXT NOT NULL UNIQUE,
+        password TEXT NOT NULL,
+        token TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+    )"
+]);
+
+$f3->set('CORS.origin', '*');
+
+// === Obsługa OPTIONS dla dowolnej ścieżki (preflight dla /api/*) ===
+$f3->route('OPTIONS /*', function($f3) {
+    header('Access-Control-Allow-Origin: *');
+    header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
+    header('Access-Control-Allow-Headers: Content-Type, Authorization');
+    header('Access-Control-Max-Age: 3600');
+    $f3->status(200);
+});
+
+// Trasy auth dodamy w następnej sekcji
+// $f3->route('POST /api/auth/register', 'AuthController->register');
+// ...
+
+$f3->run();                                          // dopasuj URL do trasy i wywołaj handler</code></pre>
+      <p class="tip"><strong>Tip:</strong> Katalogiem dokumentu serwera musi być <code>public</code>, żeby nie udostępniać <code>app/</code> ani <code>data/</code> wprost. Przy wbudowanym serwerze PHP użyj <code>-t public</code>.</p>
+
+      <h3>Konfiguracja <code>app/config.ini</code></h3>
+      <pre><code>[globals]
+DEBUG=3                                    ; poziom szczegółowości błędów (0–3); przy 500 zobaczysz stack trace
+AUTOLOAD=../app/Controllers/;../app/Models/  ; ścieżki do autoloadu: F3 ładuje klasę z pliku o nazwie Klasa.php
+CORS.origin=*                               ; wartość nagłówka Access-Control-Allow-Origin (F3 może go dodać)</code></pre>
+      <p><code>AUTOLOAD</code> – F3 ładuje klasy z tych katalogów (nazwa pliku = nazwa klasy, np. <code>AuthController.php</code> → <code>AuthController</code>).</p>
+
+      <h3>Uruchomienie backendu</h3>
+      <pre><code>cd backend
+php -S localhost:8080 -t public</code></pre>
+      <p>Sprawdź w przeglądarce lub przez <code>curl</code>: <code>http://localhost:8080/api/auth/me</code> – na razie może zwrócić 404 (brak trasy), ale nie błąd PHP. Jeśli widzisz 404 z F3, routing działa.</p>
+
+      <h3>Debugowanie (backend)</h3>
+      <ul>
+        <li><strong>404 na wszystkie /api/*</strong> – upewnij się, że żądanie trafia do <code>index.php</code> (np. <code>-t public</code> lub rewrite w Apache/Nginx).</li>
+        <li><strong>CORS</strong> – w zakładce Network sprawdź, czy odpowiedź ma nagłówki <code>Access-Control-Allow-*</code>. OPTIONS musi kończyć się <code>exit;</code> bez wywoływania <code>$f3->run()</code>.</li>
+        <li><strong>Baza</strong> – folder <code>data/</code> musi istnieć i być zapisywalny; po pierwszym uruchomieniu pojawi się <code>notes.db</code>.</li>
+      </ul>
+    </section>
+
+    <!-- ========== 3. FRONTEND ========== -->
+    <section class="section" id="frontend">
+      <h2>3. Frontend – postawienie od zera</h2>
+
+      <h3>Projekt Vite + React + TypeScript</h3>
+      <pre><code>npm create vite@latest frontend -- --template react-ts
+cd frontend
+npm install
+npm install react-router-dom</code></pre>
+
+      <h3>Proxy i alias w <code>vite.config.ts</code></h3>
+      <p>Żądania do <code>/api</code> mają być przekierowane na backend (np. port 8080). Dzięki temu w kodzie możesz używać względnych URL-i (<code>/api/auth/login</code>), a Vite w trybie dev przekieruje je na backend.</p>
+      <pre><code>import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import path from 'path';
+
+export default defineConfig({
+  plugins: [react()],
+  resolve: {
+    // Dzięki temu w imporcie piszesz @/api/auth zamiast ../../../api/auth
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
+  server: {
+    // W dev: request do localhost:5173/api/... trafi na localhost:8080/api/...
+    proxy: {
+      '/api': {
+        target: process.env.VITE_API_BASE ?? 'http://localhost:8080',
+        changeOrigin: true,   // zmienia Host na target (potrzebne przy niektórych serwerach)
+      },
+    },
+  },
+});</code></pre>
+
+      <h3>Zmienna środowiskowa i <code>config.ts</code></h3>
+      <p>W developmentie zwykle <strong>nie</strong> ustawiasz <code>VITE_API_BASE</code> – wtedy <code>API_BASE_URL</code> jest pusty i requesty idą na ten sam host (np. <code>http://localhost:5173/api/...</code>), a Vite przekierowuje je na backend. W produkcji możesz ustawić pełny URL API.</p>
+      <pre><code>// src/config.ts
+// import.meta.env.VITE_* – zmienne z .env; w dev bez .env = '' → requesty idą na ten sam host (proxy)
+export const API_BASE_URL = import.meta.env.VITE_API_BASE ?? '';</code></pre>
+      <p>W requestach używaj: <code>fetch(`${API_BASE_URL}/api/auth/login`, ...)</code>. Przy pustym <code>API_BASE_URL</code> będzie to <code>/api/auth/login</code> – czyli przez proxy.</p>
+
+      <h3>Uruchomienie frontendu</h3>
+      <pre><code>npm run dev</code></pre>
+      <p>Otwórz <code>http://localhost:5173</code>. Upewnij się, że backend działa na <code>http://localhost:8080</code>, żeby proxy działało.</p>
+
+      <h3>Debugowanie (frontend)</h3>
+      <ul>
+        <li><strong>Requesty do API kończą się 404</strong> – sprawdź w Vite, czy <code>proxy['/api'].target</code> wskazuje na adres i port, na którym nasłuchuje backend.</li>
+        <li>CORS w dev przy proxy zwykle nie jest problemem – przeglądarka widzi ten sam origin (localhost:5173), a serwer Vite przekazuje request do backendu.</li>
+      </ul>
+    </section>
+
+    <!-- ========== 4. USER + AUTH CONTROLLER ========== -->
+    <section class="section" id="user-backend">
+      <h2>4. Model i kontroler użytkownika (backend)</h2>
+
+      <h3>Model <code>app/Models/User.php</code></h3>
+      <p>F3 używa mapperów do tabel. Klasa rozszerza <code>\DB\SQL\Mapper</code>, w konstruktorze podajesz bazę i nazwę tabeli. Metody <code>load</code> + <code>dry()</code> sprawdzają, czy znaleziono wiersz.</p>
+      <pre><code>&lt;?php
+// Mapper F3: jedna klasa = jedna tabela; load() ładuje wiersz, dry() = true gdy brak wyniku
+class User extends \DB\SQL\Mapper {
+
+    public function __construct(\DB\SQL $db) {
+        parent::__construct($db, 'users');   // powiązanie z tabelą 'users'
+    }
+
+    // Wyszukanie po emailu; load() ustawia wewnętrzny wskaźnik na wiersz (lub brak)
+    public function findByEmail(string $email): bool {
+        $this->load(['email = ?', $email]);
+        return !$this->dry();                 // true = znaleziono (nie „pusty” wynik)
+    }
+
+    public function findByUsername(string $username): bool {
+        $this->load(['username = ?', $username]);
+        return !$this->dry();
+    }
+
+    // Używane przy każdym chronionym requestcie: token z nagłówka Authorization
+    public function findByToken(string $token): bool {
+        $this->load(['token = ?', $token]);
+        return !$this->dry();
+    }
+
+    // Hasło nigdy w plain text – bcrypt (domyślny algorytm w PHP)
+    public function setPassword(string $password): void {
+        $this->password = password_hash($password, PASSWORD_BCRYPT);
+    }
+
+    public function verifyPassword(string $password): bool {
+        return password_verify($password, $this->password);
+    }
+
+    // Token sesji: 64 znaki hex (32 bajty entropy); zapisujemy w modelu i w DB
+    public function generateToken(): string {
+        $token = bin2hex(random_bytes(32));
+        $this->token = $token;
+        return $token;
+    }
+
+    // Do odpowiedzi JSON – bez hasła i tokenu (bezpieczeństwo)
+    public function toArray(): array {
+        return [
+            'id'         => $this->id,
+            'username'   => $this->username,
+            'email'      => $this->email,
+            'created_at' => $this->created_at,
+        ];
+    }
+}</code></pre>
+      <p class="tip"><strong>Tip:</strong> W <code>toArray()</code> nie zwracaj hasła ani tokenu – tylko dane do wyświetlenia użytkownikowi.</p>
+
+      <h3>Kontroler <code>app/Controllers/AuthController.php</code></h3>
+      <p>Wspólne metody: <code>json</code> (status + nagłówek JSON + echo), <code>getBody</code> (odczyt <code>php://input</code>, json_decode), <code>getToken</code> (nagłówek <code>Authorization: Bearer &lt;token&gt;</code>).</p>
+      <pre><code>&lt;?php
+class AuthController {
+
+    // Wysłanie odpowiedzi JSON: kod HTTP, nagłówek Content-Type, body jako JSON
+    private function json($f3, $data, int $status = 200): void {
+        $f3->status($status);
+        header('Content-Type: application/json');
+        header('Access-Control-Allow-Origin: *');
+        echo json_encode($data);
+    }
+
+    // Body requestu (POST/PUT) – w PHP odczytujemy tylko raz z php://input
+    private function getBody(): array {
+        $body = file_get_contents('php://input');
+        return json_decode($body, true) ?: [];
+    }
+
+    // Wyciągnięcie tokenu z nagłówka "Authorization: Bearer &lt;token&gt;"
+    private function getToken($f3): ?string {
+        $auth = $f3->get('HEADERS.Authorization') ?? $f3->get('HEADERS.authorization') ?? '';
+        if (preg_match('/^Bearer\s+(.+)$/i', $auth, $matches)) {
+            return $matches[1];
+        }
+        return null;
+    }
+
+    // Rejestracja: walidacja → sprawdzenie duplikatów → zapis użytkownika → zwrot user + token
+    public function register(\Base $f3): void {
+        $data = $this->getBody();
+        $username = trim($data['username'] ?? '');
+        $email    = trim($data['email'] ?? '');
+        $password = $data['password'] ?? '';
+
+        if (!$username || !$email || !$password) {
+            $this->json($f3, ['error' => 'Wszystkie pola są wymagane.'], 400);
+            return;
+        }
+        if (strlen($username) &lt; 3) {
+            $this->json($f3, ['error' => 'Nazwa użytkownika musi mieć min. 3 znaki.'], 400);
+            return;
+        }
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $this->json($f3, ['error' => 'Nieprawidłowy adres email.'], 400);
+            return;
+        }
+        if (strlen($password) &lt; 6) {
+            $this->json($f3, ['error' => 'Hasło musi mieć min. 6 znaków.'], 400);
+            return;
+        }
+
+        $user = new User($f3->get('DB'));
+        if ($user->findByEmail($email)) {
+            $this->json($f3, ['error' => 'Ten adres email jest już zajęty.'], 409);
+            return;
+        }
+        if ($user->findByUsername($username)) {
+            $this->json($f3, ['error' => 'Ta nazwa użytkownika jest już zajęta.'], 409);
+            return;
+        }
+
+        $user->reset();
+        $user->username = $username;
+        $user->email = $email;
+        $user->setPassword($password);
+        $token = $user->generateToken();
+        $user->save();
+
+        $this->json($f3, ['user' => $user->toArray(), 'token' => $token], 201);
+    }
+
+    // Logowanie: znalezienie użytkownika po emailu, weryfikacja hasła, nowy token, zwrot user + token
+    public function login(\Base $f3): void {
+        $data = $this->getBody();
+        $email    = trim($data['email'] ?? '');
+        $password = $data['password'] ?? '';
+
+        if (!$email || !$password) {
+            $this->json($f3, ['error' => 'Email i hasło są wymagane.'], 400);
+            return;
+        }
+
+        $user = new User($f3->get('DB'));
+        if (!$user->findByEmail($email)) {
+            $this->json($f3, ['error' => 'Nieprawidłowy email lub hasło.'], 401);
+            return;
+        }
+        if (!$user->verifyPassword($password)) {
+            $this->json($f3, ['error' => 'Nieprawidłowy email lub hasło.'], 401);
+            return;
+        }
+
+        $token = $user->generateToken();
+        $user->save();
+        $this->json($f3, ['user' => $user->toArray(), 'token' => $token]);
+    }
+
+    // Wylogowanie: unieważnienie tokenu w bazie (front powinien usunąć token z localStorage)
+    public function logout(\Base $f3): void {
+        $token = $this->getToken($f3);
+        if (!$token) {
+            $this->json($f3, ['error' => 'Brak tokenu autoryzacji.'], 401);
+            return;
+        }
+        $user = new User($f3->get('DB'));
+        if ($user->findByToken($token)) {
+            $user->token = null;
+            $user->save();
+        }
+        $this->json($f3, ['message' => 'Wylogowano pomyślnie.']);
+    }
+
+    // Sprawdzenie sesji: token w nagłówku → znalezienie użytkownika → zwrot danych usera (np. po odświeżeniu strony)
+    public function me(\Base $f3): void {
+        $token = $this->getToken($f3);
+        if (!$token) {
+            $this->json($f3, ['error' => 'Brak tokenu autoryzacji.'], 401);
+            return;
+        }
+        $user = new User($f3->get('DB'));
+        if (!$user->findByToken($token)) {
+            $this->json($f3, ['error' => 'Nieprawidłowy token.'], 401);
+            return;
+        }
+        $this->json($f3, ['user' => $user->toArray()]);
+    }
+}</code></pre>
+
+      <h3>Trasy w <code>public/index.php</code></h3>
+      <p>Po fragmencie z <code>$f3->route('OPTIONS /*', ...)</code> dodaj:</p>
+      <pre><code>$f3->route('POST /api/auth/register', 'AuthController->register');
+$f3->route('POST /api/auth/login', 'AuthController->login');
+$f3->route('POST /api/auth/logout', 'AuthController->logout');
+$f3->route('GET  /api/auth/me', 'AuthController->me');</code></pre>
+      <p>Sprawdź: rejestracja <code>POST /api/auth/register</code> z body <code>{"username":"test","email":"test@example.com","password":"haslo123"}</code> powinna zwrócić 201 i obiekt z <code>user</code> oraz <code>token</code>.</p>
+
+      <h3>Debugowanie</h3>
+      <ul>
+        <li><strong>500</strong> – włącz DEBUG w config, sprawdź logi PHP; sprawdź składnię (np. typy w sygnaturach w starszym PHP).</li>
+        <li><strong>401 przy /me</strong> – w żądaniu musi być nagłówek <code>Authorization: Bearer &lt;token&gt;</code> (dokładnie taka forma).</li>
+      </ul>
+    </section>
+
+    <!-- ========== 5. AUTH FRONTEND ========== -->
+    <section class="section" id="auth-frontend">
+      <h2>5. Autentykacja po stronie frontendu</h2>
+
+      <h3>Warstwa API <code>src/api/auth.ts</code></h3>
+      <pre><code>import { API_BASE_URL } from '@/config';
+
+// Bazowy URL dla wszystkich endpointów auth (register, login, logout, me)
+const API_BASE = `${API_BASE_URL}/api/auth`;
+
+export interface User {
+  id: number;
+  username: string;
+  email: string;
+  created_at: string;
+}
+
+export interface AuthResponse {
+  user: User;
+  token: string;
+}
+
+export interface ApiError {
+  error: string;
+}
+
+// Wspólna funkcja requestu: dopisuje token z localStorage do nagłówka Authorization (dla /me, logout)
+async function request&lt;T&gt;(url: string, options: RequestInit = {}): Promise&lt;T&gt; {
+  const token = localStorage.getItem('auth_token');
+  const headers: Record&lt;string, string&gt; = {
+    'Content-Type': 'application/json',
+    ...(options.headers as Record&lt;string, string&gt;),
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  const res = await fetch(`${API_BASE}${url}`, { ...options, headers });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error((data as ApiError).error || 'Wystąpił błąd serwera.');
+  }
+  return data as T;
+}
+
+export const authApi = {
+  register(username: string, email: string, password: string) {
+    return request&lt;AuthResponse&gt;('/register', {
+      method: 'POST',
+      body: JSON.stringify({ username, email, password }),
+    });
+  },
+  login(email: string, password: string) {
+    return request&lt;AuthResponse&gt;('/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+  },
+  logout() {
+    return request&lt;{ message: string }&gt;('/logout', { method: 'POST' });
+  },
+  me() {
+    return request&lt;{ user: User }&gt;('/me');
+  },
+};</code></pre>
+
+      <h3>Kontekst <code>src/context/AuthContext.tsx</code></h3>
+      <pre><code>import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import { authApi, type User } from '@/api/auth';
+
+interface AuthContextType {
+  user: User | null;
+  loading: boolean;
+  login: (email: string, password: string) =&gt; Promise&lt;void&gt;;
+  register: (username: string, email: string, password: string) =&gt; Promise&lt;void&gt;;
+  logout: () =&gt; Promise&lt;void&gt;;
+}
+
+const AuthContext = createContext&lt;AuthContextType | null&gt;(null);
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState&lt;User | null&gt;(null);
+  const [loading, setLoading] = useState(true);
+
+  // Przy starcie: jeśli jest token, wywołaj /me i ustaw usera; przy błędzie (np. 401) usuń token
+  useEffect(() =&gt; {
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      setLoading(false);
+      return;
+    }
+    authApi.me()
+      .then(({ user }) =&gt; setUser(user))
+      .catch(() =&gt; localStorage.removeItem('auth_token'))
+      .finally(() =&gt; setLoading(false));
+  }, []);
+
+  const login = useCallback(async (email: string, password: string) =&gt; {
+    const { user, token } = await authApi.login(email, password);
+    localStorage.setItem('auth_token', token);  // zapis na późniejsze requesty i po odświeżeniu
+    setUser(user);
+  }, []);
+
+  const register = useCallback(async (username: string, email: string, password: string) =&gt; {
+    const { user, token } = await authApi.register(username, email, password);
+    localStorage.setItem('auth_token', token);
+    setUser(user);
+  }, []);
+
+  const logout = useCallback(async () =&gt; {
+    try {
+      await authApi.logout();   // backend zeruje token w DB
+    } finally {
+      localStorage.removeItem('auth_token');
+      setUser(null);            // zawsze czyścimy stan, nawet gdy request się nie udał
+    }
+  }, []);
+
+  return (
+    &lt;AuthContext.Provider value={{ user, loading, login, register, logout }}&gt;
+      {children}
+    &lt;/AuthContext.Provider&gt;
+  );
+}
+
+// Hook do odczytu kontekstu – używaj w komponentach jako: const { user, login, logout } = useAuth();
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (!context) throw new Error('useAuth must be used within an AuthProvider');
+  return context;
+}</code></pre>
+
+      <h3>Integracja w <code>App.tsx</code></h3>
+      <p>Owiń drzewo komponentów w <code>AuthProvider</code>. Na czas <code>loading</code> wyświetl loader (np. „Ładowanie…”), potem albo formularz logowania, albo treść dla zalogowanego użytkownika.</p>
+      <pre><code>import { AuthProvider } from '@/context/AuthContext';
+
+function App() {
+  return (
+    &lt;AuthProvider&gt;
+      &lt;YourContent /&gt;
+    &lt;/AuthProvider&gt;
+  );
+}</code></pre>
+
+      <h3>Prosty UI logowania</h3>
+      <p>Komponent z formularzem: pola email, hasło; przy rejestracji dodatkowo username. Przyciski „Zaloguj” / „Zarejestruj” wywołują <code>login</code> lub <code>register</code> z <code>useAuth()</code>. W <code>catch</code> wyświetl <code>error.message</code>. Po udanym logowaniu stan <code>user</code> w kontekście będzie ustawiony – możesz pokazać np. „Witaj, {user.username}” i przycisk „Wyloguj” wywołujący <code>logout()</code>.</p>
+
+      <h3>Debugowanie</h3>
+      <ul>
+        <li><strong>Failed to fetch</strong> – backend musi być włączony; sprawdź proxy w Vite.</li>
+        <li><strong>401 po odświeżeniu</strong> – token w localStorage jest wysyłany do /me; jeśli backend zwraca 401, token mógł być unieważniony – w catch usuwasz token i użytkownik wraca do ekranu logowania.</li>
+      </ul>
+    </section>
+
+    <!-- ========== 6. NOTATKI ========== -->
+    <section class="section" id="notes">
+      <h2>6. Kolejne endpointy i komponenty (Notatki)</h2>
+
+      <h3>Backend – tabela i model <code>app/Models/Note.php</code></h3>
+      <p>W <code>index.php</code> dodaj tworzenie tabeli (przed <code>$f3->run()</code>):</p>
+      <pre><code>$db->exec([
+    "CREATE TABLE IF NOT EXISTS notes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        content TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT,
+        user_id INTEGER NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    )"
+]);</code></pre>
+      <p>Model:</p>
+      <pre><code>&lt;?php
+class Note extends \DB\SQL\Mapper {
+    public function __construct(\DB\SQL $db) {
+        parent::__construct($db, 'notes');
+    }
+    // Lista notatek użytkownika; find() zwraca wiele wierszy, order = najpierw ostatnio zmodyfikowane
+    public function findByUser(int $userId): array {
+        $results = $this->find(['user_id = ?', $userId], ['order' => 'updated_at DESC, created_at DESC']);
+        return array_map(fn($n) =&gt; $n->toArray(), $results);
+    }
+    // Sprawdzenie, czy notatka o danym id należy do użytkownika (przy update/delete)
+    public function findByIdAndUser(int $id, int $userId): bool {
+        $this->load(['id = ? AND user_id = ?', $id, $userId]);
+        return !$this->dry();
+    }
+    public function toArray(): array {
+        return [
+            'id' => (int) $this->id,
+            'title' => $this->title,
+            'content' => $this->content,
+            'created_at' => $this->created_at,
+            'updated_at' => $this->updated_at,
+            'user_id' => (int) $this->user_id,
+        ];
+    }
+}</code></pre>
+
+      <h3>Backend – <code>app/Controllers/NoteController.php</code></h3>
+      <p>W każdym działaniu: odczyt tokenu, znalezienie użytkownika po tokenie; brak użytkownika → 401. <code>index</code> – lista notatek użytkownika; <code>create</code> – walidacja title, zapis z <code>user_id</code>; <code>update</code> / <code>delete</code> – <code>findByIdAndUser</code>, potem aktualizacja lub <code>erase()</code>. Wzór: <code>getCurrentUser($f3)</code> zwraca User lub null.</p>
+      <pre><code>&lt;?php
+class NoteController {
+    // Wspólne: odpowiedź JSON, odczyt body, token z nagłówka, pobranie usera po tokenie
+    private function json($f3, $data, int $status = 200): void {
+        $f3->status($status);
+        header('Content-Type: application/json');
+        header('Access-Control-Allow-Origin: *');
+        echo json_encode($data);
+    }
+    private function getBody(): array {
+        $body = file_get_contents('php://input');
+        return json_decode($body, true) ?: [];
+    }
+    private function getToken($f3): ?string {
+        $auth = $f3->get('HEADERS.Authorization') ?? $f3->get('HEADERS.authorization') ?? '';
+        if (preg_match('/^Bearer\s+(.+)$/i', $auth, $m)) return $m[1];
+        return null;
+    }
+    private function getCurrentUser($f3): ?User {
+        $token = $this->getToken($f3);
+        if (!$token) return null;
+        $user = new User($f3->get('DB'));
+        return $user->findByToken($token) ? $user : null;
+    }
+    // GET /api/notes – lista notatek zalogowanego użytkownika
+    public function index(\Base $f3): void {
+        $user = $this->getCurrentUser($f3);
+        if (!$user) { $this->json($f3, ['error' => 'Brak autoryzacji.'], 401); return; }
+        $note = new Note($f3->get('DB'));
+        $notes = $note->findByUser((int)$user->id);
+        $this->json($f3, ['notes' => $notes]);
+    }
+    // POST /api/notes – nowa notatka (title wymagany, user_id z tokena)
+    public function create(\Base $f3): void {
+        $user = $this->getCurrentUser($f3);
+        if (!$user) { $this->json($f3, ['error' => 'Brak autoryzacji.'], 401); return; }
+        $data = $this->getBody();
+        $title = trim($data['title'] ?? '');
+        if (!$title) { $this->json($f3, ['error' => 'Tytuł jest wymagany.'], 400); return; }
+        $note = new Note($f3->get('DB'));
+        $note->reset();
+        $note->title = $title;
+        $note->content = trim($data['content'] ?? '');
+        $note->user_id = (int)$user->id;
+        $note->created_at = date('Y-m-d H:i:s');
+        $note->updated_at = null;
+        $note->save();
+        $this->json($f3, ['note' => $note->toArray()], 201);
+    }
+    // PUT /api/notes/@id – aktualizacja tylko własnej notatki (findByIdAndUser)
+    public function update(\Base $f3, array $params): void {
+        $user = $this->getCurrentUser($f3);
+        if (!$user) { $this->json($f3, ['error' => 'Brak autoryzacji.'], 401); return; }
+        $id = (int)($params['id'] ?? 0);
+        if (!$id) { $this->json($f3, ['error' => 'Nieprawidłowe ID.'], 400); return; }
+        $note = new Note($f3->get('DB'));
+        if (!$note->findByIdAndUser($id, (int)$user->id)) {
+            $this->json($f3, ['error' => 'Notatka nie została znaleziona.'], 404); return;
+        }
+        $data = $this->getBody();
+        $note->title = isset($data['title']) ? trim($data['title']) : $note->title;
+        $note->content = isset($data['content']) ? trim($data['content']) : $note->content;
+        $note->updated_at = date('Y-m-d H:i:s');
+        $note->save();
+        $this->json($f3, ['note' => $note->toArray()]);
+    }
+    // DELETE /api/notes/@id – usunięcie tylko własnej notatki
+    public function delete(\Base $f3, array $params): void {
+        $user = $this->getCurrentUser($f3);
+        if (!$user) { $this->json($f3, ['error' => 'Brak autoryzacji.'], 401); return; }
+        $id = (int)($params['id'] ?? 0);
+        if (!$id) { $this->json($f3, ['error' => 'Nieprawidłowe ID.'], 400); return; }
+        $note = new Note($f3->get('DB'));
+        if (!$note->findByIdAndUser($id, (int)$user->id)) {
+            $this->json($f3, ['error' => 'Notatka nie została znaleziona.'], 404); return;
+        }
+        $note->erase();
+        $this->json($f3, ['message' => 'Notatka została usunięta.']);
+    }
+}</code></pre>
+
+      <h3>Trasy notatek w <code>index.php</code></h3>
+      <pre><code>$f3->route('GET    /api/notes', 'NoteController->index');
+$f3->route('POST   /api/notes', 'NoteController->create');
+$f3->route('PUT    /api/notes/@id', 'NoteController->update');
+$f3->route('DELETE /api/notes/@id', 'NoteController->delete');</code></pre>
+
+      <h3>Frontend – <code>src/api/notes.ts</code></h3>
+      <p>Analogicznie do auth: funkcja <code>request</code> z tokenem z localStorage, base URL <code>${API_BASE_URL}/api/notes</code>. Metody: <code>getAll()</code>, <code>create({ title, content })</code>, <code>update(id, { title, content })</code>, <code>delete(id)</code>. Interfejsy: <code>Note</code>, <code>ApiError</code>.</p>
+
+      <h3>Komponent listy notatek</h3>
+      <p>Stan: <code>notes</code>, <code>loading</code>, <code>error</code>. W <code>useEffect</code> (zależność np. <code>user</code> z useAuth) wywołaj <code>notesApi.getAll()</code>, zapisz wynik w state. Render: przy loading – „Ładowanie…”; przy error – komunikat; lista notatek (tytuł, przycisk edycji/usunięcia). Przycisk „Dodaj notatkę” otwiera formularz lub przechodzi do widoku formularza.</p>
+
+      <h3>Formularz tworzenia/edycji</h3>
+      <p>Pola: title, content. Przy zapisie: <code>notesApi.create(...)</code> lub <code>notesApi.update(id, ...)</code>, potem odświeżenie listy (ponowne get lub aktualizacja stanu lokalnego).</p>
+    </section>
+
+    <!-- ========== 6b. TABLICE KANBAN (ASPEKT JIRA) ========== -->
+    <section class="section" id="kanban">
+      <h2>6b. Tablice kanban (aspekt Jira)</h2>
+      <p>W tej sekcji dodasz <strong>tablice z zadaniami</strong> w stylu Jiry: kolumny (Do zrobienia, W trakcie, Weryfikacja, Zakończone), zadania przeciągane między kolumnami, zapis stanu i kolejności w bazie. Potrzebne będą: nowe tabele w bazie, modele i kontrolery na backendzie, biblioteka do drag-and-drop na frontendzie oraz komponenty kanban.</p>
+
+      <h3>Baza danych – tabele dla tablic i zadań</h3>
+      <p>W <code>public/index.php</code>, w wywołaniu <code>$db->exec([...])</code>, dodaj (w tej samej tablicy co <code>users</code> i <code>notes</code> lub w osobnym <code>exec</code>):</p>
+      <pre><code>// Kategorie tablic (np. „Projekt X”, „Osobiste”) – grupowanie boardów
+"CREATE TABLE IF NOT EXISTS board_categories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    parent_id INTEGER,
+    user_id INTEGER NOT NULL,
+    FOREIGN KEY (parent_id) REFERENCES board_categories(id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+)",
+// Tablica = jeden projekt/kanban (należy do kategorii i użytkownika)
+"CREATE TABLE IF NOT EXISTS boards (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    board_category_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    FOREIGN KEY (board_category_id) REFERENCES board_categories(id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+)",
+// Zadanie: należy do tablicy, ma status (kolumna) i position (kolejność w kolumnie)
+"CREATE TABLE IF NOT EXISTS tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    board_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    content TEXT,
+    difficulty INTEGER DEFAULT 0,
+    created_at TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'todo',
+    position INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (board_id) REFERENCES boards(id)
+)"</code></pre>
+      <p class="tip"><strong>Tip:</strong> Wartości <code>status</code> to np. <code>todo</code>, <code>in_progress</code>, <code>verification</code>, <code>done</code>. Kolumna <code>position</code> określa kolejność zadań w ramach jednej kolumny (do sortowania po przeciągnięciu).</p>
+
+      <h3>Backend – model <code>app/Models/BoardCategory.php</code></h3>
+      <pre><code>&lt;?php
+// Prosty mapper: lista kategorii użytkownika, sprawdzenie „czy kategoria należy do usera”
+class BoardCategory extends \DB\SQL\Mapper {
+    public function __construct(\DB\SQL $db) {
+        parent::__construct($db, 'board_categories');
+    }
+    public function findByUser(int $userId): array {
+        $results = $this->find(['user_id = ?', $userId], ['order' => 'name ASC']);
+        return array_map(fn($c) =&gt; $c->toArray(), $results);
+    }
+    public function findByIdAndUser(int $id, int $userId): bool {
+        $this->load(['id = ? AND user_id = ?', $id, $userId]);
+        return !$this->dry();
+    }
+    public function toArray(): array {
+        return [
+            'id' =&gt; (int) $this->id,
+            'name' =&gt; $this->name,
+            'parent_id' =&gt; $this->parent_id !== null ? (int) $this->parent_id : null,
+            'user_id' =&gt; (int) $this->user_id,
+        ];
+    }
+}</code></pre>
+
+      <h3>Backend – model <code>app/Models/Board.php</code></h3>
+      <pre><code>&lt;?php
+// Tablica należy do użytkownika i (opcjonalnie) do kategorii
+class Board extends \DB\SQL\Mapper {
+    public function __construct(\DB\SQL $db) {
+        parent::__construct($db, 'boards');
+    }
+    public function findByUser(int $userId, ?int $boardCategoryId = null): array {
+        $cond = ['user_id = ?', $userId];
+        if ($boardCategoryId !== null) {
+            $cond[0] .= ' AND board_category_id = ?';
+            $cond[] = $boardCategoryId;
+        }
+        $results = $this->find($cond, ['order' =&gt; 'name ASC']);
+        return array_map(fn($b) =&gt; $b->toArray(), $results);
+    }
+    public function findByIdAndUser(int $id, int $userId): bool {
+        $this->load(['id = ? AND user_id = ?', $id, $userId]);
+        return !$this->dry();
+    }
+    public function toArray(): array {
+        return [
+            'id' =&gt; (int) $this->id,
+            'name' =&gt; $this->name,
+            'board_category_id' =&gt; (int) $this->board_category_id,
+            'user_id' =&gt; (int) $this->user_id,
+        ];
+    }
+}</code></pre>
+
+      <h3>Backend – model <code>app/Models/Task.php</code></h3>
+      <pre><code>&lt;?php
+// Status = kolumna kanban; position = kolejność w kolumnie (do reorder)
+class Task extends \DB\SQL\Mapper {
+    public const STATUS_TODO = 'todo';
+    public const STATUS_IN_PROGRESS = 'in_progress';
+    public const STATUS_VERIFICATION = 'verification';
+    public const STATUS_DONE = 'done';
+    public const STATUSES = [self::STATUS_TODO, self::STATUS_IN_PROGRESS, self::STATUS_VERIFICATION, self::STATUS_DONE];
+
+    public function __construct(\DB\SQL $db) {
+        parent::__construct($db, 'tasks');
+    }
+    // Lista zadań tablicy – tylko jeśli użytkownik ma dostęp do boardu (sprawdzenie w kontrolerze)
+    public function findByBoard(int $boardId): array {
+        $results = $this->find(
+            ['board_id = ?', $boardId],
+            ['order' =&gt; 'status ASC, position ASC, id ASC']
+        );
+        return array_map(fn($t) =&gt; $t->toArray(), $results);
+    }
+    public function findByIdAndBoard(int $id, int $boardId): bool {
+        $this->load(['id = ? AND board_id = ?', $id, $boardId]);
+        return !$this->dry();
+    }
+    // Następna wolna position w danej kolumnie (przy dodawaniu zadania lub przeniesieniu)
+    public function getMaxPosition(int $boardId, string $status): int {
+        $r = $this->db->exec(
+            'SELECT COALESCE(MAX(position), -1) + 1 AS next_pos FROM tasks WHERE board_id = ? AND status = ?',
+            [$boardId, $status]
+        );
+        return isset($r[0]['next_pos']) ? (int) $r[0]['next_pos'] : 0;
+    }
+    public function toArray(): array {
+        return [
+            'id' =&gt; (int) $this->id,
+            'board_id' =&gt; (int) $this->board_id,
+            'title' =&gt; $this->title,
+            'content' =&gt; $this->content ?? '',
+            'difficulty' =&gt; (int) ($this->difficulty ?? 0),
+            'created_at' =&gt; $this->created_at,
+            'status' =&gt; $this->status ?? self::STATUS_TODO,
+            'position' =&gt; (int) ($this->position ?? 0),
+        ];
+    }
+}</code></pre>
+
+      <h3>Backend – kontrolery BoardCategory, Board, Task i trasy</h3>
+      <p><strong>BoardCategoryController</strong>: <code>index</code> (GET /api/board-categories) – lista kategorii użytkownika; <code>create</code>, <code>update</code>, <code>delete</code> z sprawdzeniem <code>getCurrentUser</code> i <code>findByIdAndUser</code>. <strong>BoardController</strong>: <code>index</code> (lista tablic, opcjonalnie po <code>board_category_id</code>), <code>getOne</code> (GET /api/boards/@id), <code>create</code>, <code>update</code>, <code>delete</code> – zawsze weryfikacja usera. <strong>TaskController</strong>: <code>index</code> (GET /api/boards/@boardId/tasks) – lista zadań tablicy (najpierw sprawdź, czy użytkownik ma dostęp do boardu); <code>create</code> – nowe zadanie ze statusem <code>todo</code> i <code>position = getMaxPosition(boardId, 'todo')</code>; <code>update</code> – edycja tytułu/treści/statusu (przy zmianie statusu ustaw <code>position = getMaxPosition(..., nowy_status)</code>); <code>reorder</code> (PUT /api/boards/@boardId/tasks/reorder) – body: <code>{ "status": "in_progress", "task_ids": [3, 1, 5] }</code> – ustawia każde zadanie na podany status i position = indeks w tablicy; <code>delete</code> – usunięcie zadania.</p>
+      <p>Przykład trasy reorder w <code>index.php</code>:</p>
+      <pre><code>$f3->route('PUT /api/boards/@boardId/tasks/reorder', 'TaskController->reorder');</code></pre>
+      <p>W <code>TaskController->reorder</code>: pobierz <code>boardId</code> z <code>$params['boardId']</code>, sprawdź dostęp użytkownika do boardu, odczytaj z body <code>status</code> i <code>task_ids</code> (tablica id zadań). Dla każdego id: <code>findByIdAndBoard</code>, ustaw <code>task->status = status</code>, <code>task->position = indeks w pętli</code>, <code>task->save()</code>. Na końcu zwróć zaktualizowaną listę zadań (np. ponowne <code>findByBoard</code>).</p>
+
+      <h3>Instalacja biblioteki do przeciągania (frontend)</h3>
+      <p>Użyj <strong>@dnd-kit</strong> – lekka biblioteka do drag-and-drop w React (bez zewnętrznych zależności od jQuery czy starego HTML5 DnD). Instalacja:</p>
+      <pre><code>cd frontend
+npm install @dnd-kit/core @dnd-kit/utilities @dnd-kit/sortable</code></pre>
+      <ul>
+        <li><code>@dnd-kit/core</code> – kontekst (<code>DndContext</code>), sensory (np. <code>PointerSensor</code>), hooki <code>useDraggable</code>, <code>useDroppable</code>, zdarzenie <code>onDragEnd</code>.</li>
+        <li><code>@dnd-kit/utilities</code> – <code>CSS.Translate.toString(transform)</code> do animacji przesunięcia elementu podczas przeciągania.</li>
+        <li><code>@dnd-kit/sortable</code> – opcjonalnie do sortowania list (można też samodzielnie obsłużyć kolejność w <code>onDragEnd</code>).</li>
+      </ul>
+
+      <h3>Frontend – API tablic i zadań</h3>
+      <p><code>src/api/boards.ts</code>: bazowy URL <code>${API_BASE_URL}/api/boards</code>, request z tokenem (jak w auth). Metody: <code>getAll(boardCategoryId?)</code>, <code>getById(id)</code>, <code>create({ name, board_category_id })</code>, <code>update(id, { name?, board_category_id? })</code>, <code>delete(id)</code>. Interfejsy: <code>Board</code>, <code>ApiError</code>.</p>
+      <p><code>src/api/tasks.ts</code>: URL zależy od boardId: <code>${API_BASE_URL}/api/boards/${boardId}/tasks</code>. Metody: <code>getByBoard(boardId)</code>, <code>create(boardId, { title, content?, difficulty? })</code>, <code>update(boardId, taskId, { title?, content?, difficulty?, status? })</code>, <code>delete(boardId, taskId)</code>, <code>reorder(boardId, status, taskIds)</code> – PUT z body <code>{ status, task_ids: taskIds }</code>. Typ <code>TaskStatus</code> = <code>'todo' | 'in_progress' | 'verification' | 'done'</code>.</p>
+
+      <h3>Komponent widoku tablicy – <code>DndContext</code> i kolumny</h3>
+      <p>Struktura: jedna strona/widok na jedną tablicę (np. route <code>/board/:boardId</code>). W komponencie:</p>
+      <ul>
+        <li>Stan: <code>board</code>, <code>tasks</code>, <code>loading</code>. W <code>useEffect</code> (zależność <code>boardId</code>): <code>boardsApi.getById(id)</code> i <code>tasksApi.getByBoard(id)</code>, zapisz wyniki w state.</li>
+        <li>Stałe kolumn: <code>COLUMN_IDS = ['todo', 'in_progress', 'verification', 'done']</code> i <code>COLUMN_TITLES</code> (np. „Do zrobienia”, „W trakcie”, …).</li>
+        <li>Podziel <code>tasks</code> po <code>status</code>: <code>tasksByStatus[status]</code> – tablica zadań danej kolumny.</li>
+        <li>Render: nagłówek z nazwą tablicy, przycisk „Dodaj zadanie”; siatka kolumn (np. grid 4 kolumny). Każda kolumna to komponent <strong>DroppableColumn</strong> (obiekt docelowy drop). Wewnątrz kolumny – lista zadań jako <strong>DraggableTaskCard</strong> (obiekt przeciągany).</li>
+      </ul>
+
+      <h3>Hook <code>useDroppable</code> – kolumna jako „strefa upuszczenia”</h3>
+      <pre><code>// W DroppableColumn: id kolumny = status (np. 'in_progress')
+const { isOver, setNodeRef } = useDroppable({ id: status, disabled: readOnly });
+return (
+  &lt;div ref={setNodeRef} className={isOver ? 'column-over' : ''}&gt;
+    &lt;h3&gt;{title}&lt;/h3&gt;
+    {tasks.map((task) =&gt; (
+      &lt;DraggableTaskCard key={task.id} task={task} onClick={...} readOnly={readOnly} /&gt;
+    ))}
+  &lt;/div&gt;
+);</code></pre>
+      <p><code>setNodeRef</code> – przypisz do elementu DOM, który ma być strefą drop. <code>isOver</code> – true, gdy użytkownik przeciąga element nad tą strefą (możesz podświetlić kolumnę).</p>
+
+      <h3>Hook <code>useDraggable</code> – karta zadania</h3>
+      <pre><code>// W DraggableTaskCard: id = 'task-' + task.id, data = { task }
+const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+  id: `task-${task.id}`,
+  data: { task },
+  disabled: readOnly,
+});
+const style = transform ? { transform: CSS.Translate.toString(transform) } : undefined;
+return (
+  &lt;div ref={setNodeRef} style={style} {...listeners} {...attributes}
+       className={isDragging ? 'dragging' : ''}&gt;
+    &lt;div&gt;{task.title}&lt;/div&gt;
+  &lt;/div&gt;
+);</code></pre>
+      <p><code>listeners</code> i <code>attributes</code> – przypnij do elementu, który ma być „chwytem” (np. cała karta). <code>transform</code> – przesunięcie w trakcie przeciągania (CSS transform). <code>isDragging</code> – np. zmniejsz opacity karty podczas przeciągania.</p>
+
+      <h3>Obsługa <code>onDragEnd</code> – zapis nowego statusu i kolejności</h3>
+      <p>W <code>DndContext</code> przekaż <code>onDragEnd={handleDragEnd}</code>. W <code>handleDragEnd(event)</code>: <code>active</code> = przeciągany element (np. <code>active.id === 'task-5'</code>), <code>over</code> = element nad którym upuszczono (kolumna lub inna karta).</p>
+      <ul>
+        <li>Jeśli <code>over.id</code> jest jednym z <code>COLUMN_IDS</code> (np. <code>in_progress</code>) – zadanie przeniesiono do innej kolumny. Wywołaj <code>tasksApi.reorder(boardId, over.id, [...aktualneIdWKolumnieOver, activeTaskId])</code>. Backend ustawi wszystkim zadaniom w tej kolumnie nowy status i position; po odpowiedzi odśwież listę zadań (<code>refreshTasks</code>).</li>
+        <li>Jeśli <code>over</code> to inna karta (np. <code>task-7</code>) – zmiana kolejności w tej samej kolumnie. Oblicz nową kolejność id (wstaw activeTaskId przed/za overTaskId), wywołaj <code>tasksApi.reorder(boardId, statusKolumny, newOrderIds)</code>, potem odśwież.</li>
+      </ul>
+      <pre><code>const handleDragEnd = (event: DragEndEvent) =&gt; {
+  const { active, over } = event;
+  if (!over || over.id === active.id) return;
+  const activeTaskId = Number(String(active.id).replace(/^task-/, ''));
+  const activeTask = tasks.find((t) =&gt; t.id === activeTaskId);
+  if (!activeTask) return;
+  if (COLUMN_IDS.includes(over.id as TaskStatus)) {
+    const newStatus = over.id as TaskStatus;
+    const currentIds = tasks.filter((t) =&gt; t.status === newStatus).map((t) =&gt; t.id);
+    tasksApi.reorder(boardId, newStatus, [...currentIds, activeTaskId]).then(() =&gt; refreshTasks());
+    return;
+  }
+  // else: over to inna karta – zmiana kolejności w kolumnie (oblicz newOrder, wywołaj reorder)
+};</code></pre>
+
+      <h3>Sensory – aktywacja przeciągania</h3>
+      <p>Żeby przeciąganie nie uruchamiało się przy każdym kliknięciu (np. w link), użyj sensora z minimalnym przesunięciem:</p>
+      <pre><code>import { PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+const sensors = useSensors(
+  useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+);
+// W JSX: &lt;DndContext sensors={sensors} onDragEnd={handleDragEnd}&gt;</code></pre>
+      <p><code>distance: 8</code> – dopiero po przesunięciu kursora o 8 px rozpoczyna się drag (klik nie uruchamia drag).</p>
+
+      <h3>Debugowanie (kanban)</h3>
+      <ul>
+        <li><strong>Zadanie nie przenosi się</strong> – sprawdź, czy <code>over.id</code> w <code>onDragEnd</code> jest poprawnie rozpoznawane (kolumna vs karta); czy <code>reorder</code> wysyła poprawne <code>task_ids</code> i <code>status</code>.</li>
+        <li><strong>401 na /api/boards</strong> – token w nagłówku; czy użytkownik jest zalogowany.</li>
+        <li><strong>Kolumna nie przyjmuje dropu</strong> – upewnij się, że <code>useDroppable</code> ma <code>id</code> równy jednemu z <code>COLUMN_IDS</code> (string), a nie np. liczbie.</li>
+      </ul>
+    </section>
+
+    <!-- ========== 7. ŁĄCZENIE ========== -->
+    <section class="section" id="polaczenie">
+      <h2>7. Łączenie z backendem – podsumowanie</h2>
+      <ul>
+        <li><strong>Dev:</strong> frontend (np. localhost:5173), proxy <code>/api</code> → backend (localhost:8080). <code>API_BASE_URL</code> pusty, więc <code>fetch('/api/...')</code> idzie przez proxy.</li>
+        <li><strong>Token:</strong> po login/register zapis w <code>localStorage</code>; każdy chroniony request dodaje nagłówek <code>Authorization: Bearer &lt;token&gt;</code>.</li>
+        <li><strong>Błędy:</strong> sprawdzaj <code>res.ok</code>, odczytaj <code>data.error</code> z JSON i pokaż użytkownikowi; przy 401 możesz usunąć token i przekierować do logowania.</li>
+        <li><strong>CORS:</strong> potrzebny przy wywołaniu API z innej domeny/portu niż backend; przy proxy w dev request z frontu idzie do Vite, więc CORS dla API nie jest wtedy wymagany po stronie przeglądarki.</li>
+      </ul>
+    </section>
+
+    <!-- ========== 8. DEBUGOWANIE ========== -->
+    <section class="section" id="debugowanie">
+      <h2>8. Debugowanie i typowe błędy</h2>
+
+      <h3>Backend</h3>
+      <ul>
+        <li><strong>404 na /api/*</strong> – routing: katalog dokumentu musi być <code>public</code>, żeby URL trafiał do <code>index.php</code> (np. <code>php -S localhost:8080 -t public</code>).</li>
+        <li><strong>500</strong> – w config ustaw <code>DEBUG=3</code>, sprawdź logi PHP; sprawdź składnię i typy (PHP 7.2+).</li>
+        <li><strong>Baza</strong> – katalog <code>data/</code> musi istnieć i być zapisywalny; po pierwszym uruchomieniu powstaje plik <code>notes.db</code>.</li>
+        <li><strong>Class not found</strong> – <code>AUTOLOAD</code> w config.ini musi wskazywać na katalogi Controllers i Models; nazwa pliku = nazwa klasy (np. <code>AuthController.php</code> → <code>AuthController</code>).</li>
+      </ul>
+
+      <h3>Frontend</h3>
+      <ul>
+        <li><strong>Requesty nie dochodzą</strong> – sprawdź proxy w Vite (target, changeOrigin) i czy backend nasłuchuje na podanym porcie.</li>
+        <li><strong>401 po zalogowaniu</strong> – format nagłówka <code>Authorization: Bearer &lt;token&gt;</code>; endpoint <code>/me</code> musi zwracać 200 dla poprawnego tokenu.</li>
+        <li><strong>Niespójny stan użytkownika</strong> – jeden źródłowy stan w AuthContext; komponenty czytają user przez <code>useAuth()</code>.</li>
+      </ul>
+
+      <h3>Wspólne</h3>
+      <ul>
+        <li><strong>Content-Type:</strong> requesty POST/PUT z body – <code>Content-Type: application/json</code>; odpowiedzi z API – ten sam nagłówek.</li>
+        <li><strong>Body:</strong> w JS <code>body: JSON.stringify({ ... })</code>; w PHP odczyt tylko z <code>file_get_contents('php://input')</code> (strumień można odczytać raz).</li>
+      </ul>
+    </section>
+
+    <!-- ========== CO DALEJ ========== -->
+    <section class="section" id="co-dalej">
+      <h2>Co dalej</h2>
+      <p>Możesz rozbudować aplikację o: kategorie notatek (tabela <code>categories</code>, relacja <code>note.category_id</code>), odświeżanie tokenu (refresh token), testy (PHPUnit, Vitest), deployment (np. backend na shared host z PHP, frontend jako statyczne pliki + proxy do API).</p>
+    </section>
+  </article>
+  <script src="scripts.js"></script>
+</body>
+</html>
