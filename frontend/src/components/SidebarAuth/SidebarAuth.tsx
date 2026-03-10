@@ -45,6 +45,7 @@ const SidebarAuth: React.FC = () => {
       <UserInfo>
         <div>
           <UserName>{user.username}</UserName>
+          <UserEmail>{user.email}</UserEmail>
         </div>
         <Button variant="ghost" size="sm" fullWidth onClick={() => logout()}>
           Wyloguj

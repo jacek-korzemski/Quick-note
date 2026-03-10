@@ -50,7 +50,7 @@ const GridWrapper = styled.div`
 `;
 
 const TimeColumn = styled.div`
-  background: ${({ theme }) => theme.colors.backgroundAlt};
+  background: ${({ theme }) => theme.colors.background};
   border-right: 1px solid ${({ theme }) => theme.colors.border};
 `;
 
@@ -99,7 +99,7 @@ const EntryBlock = styled.div<{ $isDragging?: boolean; $isOver?: boolean }>`
   border-radius: 4px;
   padding: 4px 6px;
   font-size: ${({ theme }) => theme.fontSize.xs};
-  background: ${({ theme, $isOver }) =>
+  background: ${({ $isOver }) =>
     $isOver ? 'rgba(80, 120, 255, 0.28)' : 'rgba(80, 120, 255, 0.18)'};
   border: 1px solid
     ${({ $isDragging }) => ($isDragging ? 'rgba(80, 120, 255, 0.4)' : 'rgba(80, 120, 255, 0.8)')};
@@ -425,7 +425,7 @@ const TimeTrackerPage: React.FC = () => {
         onClose={handleCloseEdit}
         title="Edycja zadania czasu"
         variant="center"
-        maxWidth={480}
+        maxWidth="480px"
         footer={
           <ModalFooterRow>
             <Button variant="danger" onClick={handleDeleteTask}>
