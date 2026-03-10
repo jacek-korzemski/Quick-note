@@ -37,7 +37,7 @@ rem Base dla Vite i API
 set "VITE_BASE=!BASE_PATH!/"
 set "VITE_API_BASE=!BASE_PATH!/backend/public"
 set "VITE_OUT_DIR=../build"
-endlocal & set "VITE_BASE=%VITE_BASE%" & set "VITE_API_BASE=%VITE_API_BASE%" & set "VITE_OUT_DIR=%VITE_OUT_DIR%"
+endlocal & set "VITE_BASE=%VITE_BASE%" & set "VITE_API_BASE=%VITE_API_BASE%" & set "VITE_OUT_DIR=%VITE_OUT_DIR%" & set "BASE_PATH=%BASE_PATH%"
 
 echo.
 echo Ustawienia:
@@ -93,6 +93,17 @@ if errorlevel 1 (
   exit /b 1
 )
 if not exist "build\backend\data" mkdir "build\backend\data"
+
+echo.
+echo Generowanie .htaccess dla SPA w build\...
+(
+  echo RewriteEngine On
+  echo RewriteBase %BASE_PATH%/
+  echo RewriteRule ^index\.html$ - [L]
+  echo RewriteCond %%{REQUEST_FILENAME} !-f
+  echo RewriteCond %%{REQUEST_FILENAME} !-d
+  echo RewriteRule . %BASE_PATH%/index.html [L]
+) > "build\.htaccess"
 
 echo.
 echo === Gotowe ===

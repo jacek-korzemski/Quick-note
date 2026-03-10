@@ -76,12 +76,40 @@ $db->exec([
         task_id INTEGER NOT NULL,
         changed_at TEXT NOT NULL,
         description TEXT NOT NULL,
-        FOREIGN KEY (task_id) REFERENCES tasks(id)
+      FOREIGN KEY (task_id) REFERENCES tasks(id)
+    )",
+    "CREATE TABLE IF NOT EXISTS time_tasks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        duration_minutes INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT,
+        comment TEXT,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    )",
+    "CREATE TABLE IF NOT EXISTS time_entries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        task_id INTEGER NOT NULL,
+        start_datetime TEXT NOT NULL,
+        end_datetime TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id),
+        FOREIGN KEY (task_id) REFERENCES time_tasks(id)
     )"
 ]);
 
 try {
     $db->exec("ALTER TABLE notes ADD COLUMN category_id INTEGER REFERENCES categories(id)");
+} catch (Exception $e) {
+    if (strpos($e->getMessage(), 'duplicate column name') === false) {
+        throw $e;
+    }
+}
+try {
+    $db->exec("ALTER TABLE time_tasks ADD COLUMN comment TEXT");
 } catch (Exception $e) {
     if (strpos($e->getMessage(), 'duplicate column name') === false) {
         throw $e;
@@ -175,5 +203,10 @@ $f3->route('POST   /api/boards/@boardId/tasks', 'TaskController->create');
 $f3->route('PUT    /api/boards/@boardId/tasks/reorder', 'TaskController->reorder');
 $f3->route('PUT    /api/boards/@boardId/tasks/@id', 'TaskController->update');
 $f3->route('DELETE /api/boards/@boardId/tasks/@id', 'TaskController->delete');
+
+$f3->route('GET    /api/time/week', 'TimeTrackerController->week');
+$f3->route('POST   /api/time/tasks', 'TimeTrackerController->createTask');
+$f3->route('PATCH  /api/time/tasks/@id', 'TimeTrackerController->updateTask');
+$f3->route('DELETE /api/time/tasks/@id', 'TimeTrackerController->deleteTask');
 
 $f3->run();

@@ -286,6 +286,10 @@ const SidebarActions = () => {
     navigate('/');
   };
 
+  const handleGoToTimeTracker = () => {
+    navigate('/time-tracker');
+  };
+
   if (!user) return null;
 
   return (
@@ -435,6 +439,12 @@ const SidebarActions = () => {
           variant="danger"
           loading={deleteBoardLoading}
         />
+      </SidebarActionsWrapper>
+      <SidebarActionsWrapper flex>
+        <h2 style={{ width: '100%' }}>Time Tracker</h2>
+        <Button variant="secondary" fullWidth onClick={handleGoToTimeTracker}>
+          Open Week View
+        </Button>
       </SidebarActionsWrapper>
       <SidebarActionsWrapper flex>
         <h2 style={{ width: '100%' }}>Archiwum</h2>
