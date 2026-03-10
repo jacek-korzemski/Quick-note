@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Button } from "@/components/Button/Button";
 import { useAuth } from "@/context/AuthContext";
 import { useNotes } from "@/context/NotesContext";
 import { useCategories } from "@/context/CategoriesContext";
@@ -20,20 +19,60 @@ import { boardCategoriesApi } from "@/api/boardCategories";
 import { boardsApi, type Board } from "@/api/boards";
 import styled from "styled-components";
 
-const SidebarActionsWrapper = styled.div<{ flex?: boolean }>`
-  margin-bottom: 8px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid ${({ theme }) => theme.colors.border};
-  display: flex;
-  justify-content: flex-start;
-  align-items: center;
-  gap: 8px;
-  ${({ flex }) => (flex ? `flex-wrap: wrap;` : `flex-wrap: nowrap;`)}
+/* ── Styled Components ─────────────────────────────────────── */
+
+const SidebarSection = styled.div`
+  padding: 8px 0;
+
+  & + & {
+    border-top: 1px solid ${({ theme }) => theme.colors.border};
+  }
 `;
 
-const CategoriesList = styled.div`
+const SectionHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px 4px;
+`;
+
+const SectionLabel = styled.span`
+  font-size: ${({ theme }) => theme.fontSize.sm};
+  font-weight: ${({ theme }) => theme.fontWeight.semibold};
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: ${({ theme }) => theme.colors.textSecondary};
+  user-select: none;
+`;
+
+const SectionActions = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 2px;
+`;
+
+const AddButton = styled.button`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: ${({ theme }) => theme.borderRadius.sm};
+  color: ${({ theme }) => theme.colors.textSecondary};
+  cursor: pointer;
+  transition: all ${({ theme }) => theme.transitions.fast};
+
+  &:hover {
+    background: ${({ theme }) => theme.colors.surfaceHover};
+    color: ${({ theme }) => theme.colors.text};
+  }
+`;
+
+const SectionContent = styled.div`
   width: 100%;
-  margin-bottom: 8px;
 `;
 
 const BoardLink = styled(Link)`
@@ -43,6 +82,7 @@ const BoardLink = styled(Link)`
   color: ${({ theme }) => theme.colors.text};
   text-decoration: none;
   border-radius: ${({ theme }) => theme.borderRadius.xs};
+
   &:hover {
     background: ${({ theme }) => theme.colors.border};
   }
@@ -51,6 +91,31 @@ const BoardLink = styled(Link)`
 const BoardsList = styled.div`
   padding-left: 8px;
 `;
+
+/* ── Icons ─────────────────────────────────────────────────── */
+
+const PlusIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+    <path d="M8 3v10M3 8h10" />
+  </svg>
+);
+
+const NotePlusIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9 2H4.5A1.5 1.5 0 003 3.5v9A1.5 1.5 0 004.5 14h7a1.5 1.5 0 001.5-1.5V6L9 2z" />
+    <path d="M9 2v4h4" />
+    <path d="M8 8.5v3M6.5 10h3" />
+  </svg>
+);
+
+const BoardPlusIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="3" width="12" height="10" rx="1.5" />
+    <path d="M8 5.5v5M5.5 8h5" />
+  </svg>
+);
+
+/* ── Sub-components ────────────────────────────────────────── */
 
 const CategoryTreeItem: React.FC<{
   node: CategoryTreeNode;
@@ -180,6 +245,8 @@ const BoardCategoryTreeItem: React.FC<{
   );
 };
 
+/* ── Main Component ────────────────────────────────────────── */
+
 const SidebarActions = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -246,7 +313,7 @@ const SidebarActions = () => {
       refreshCategories();
       refreshNotes();
     } catch {
-      // Error handling - could use snackbar
+      // noop
     } finally {
       setDeleteLoading(false);
     }
@@ -261,7 +328,7 @@ const SidebarActions = () => {
       refreshBoardCategories();
       refreshBoards();
     } catch {
-      // pass
+      // noop
     } finally {
       setDeleteBoardCategoryLoading(false);
     }
@@ -275,7 +342,7 @@ const SidebarActions = () => {
       setDeleteBoard(null);
       refreshBoards();
     } catch {
-      // pass
+      // noop
     } finally {
       setDeleteBoardLoading(false);
     }
@@ -286,84 +353,54 @@ const SidebarActions = () => {
     navigate('/');
   };
 
-  const handleGoToTimeTracker = () => {
-    navigate('/time-tracker');
-  };
-
   if (!user) return null;
 
   return (
     <>
-      <CategoriesList>
-        <h2>Notes</h2>
-        <TreeItem
-          label="Wszystkie notatki"
-          onClick={() => handleNotesSelect(null)}
-          selected={selectedCategoryId === null}
-        />
-        {tree.map((node) => (
-          <CategoryTreeItem
-            key={node.id}
-            node={node}
-            selectedCategoryId={selectedCategoryId}
-            onSelect={(id) => handleNotesSelect(id)}
-            onDelete={setDeleteCategory}
-          />
-        ))}
-      </CategoriesList>
-      <SidebarActionsWrapper>
-        <Button variant="tertiary" fullWidth onClick={() => setCategoryEditorOpen(true)}>
-          Add Category
-        </Button>
-        <Button variant="tertiary" fullWidth onClick={() => setEditorOpen(true)}>
-          Add Note
-        </Button>
-        <NoteEditorModal
-          isOpen={editorOpen}
-          onClose={() => setEditorOpen(false)}
-          onSuccess={() => {
-            setEditorOpen(false);
-            refreshNotes();
-          }}
-          note={null}
-        />
-        <CategoryEditorModal
-          isOpen={categoryEditorOpen}
-          onClose={() => setCategoryEditorOpen(false)}
-          onSuccess={() => {
-            setCategoryEditorOpen(false);
-            refreshCategories();
-          }}
-        />
-        <ConfirmDialog
-          isOpen={!!deleteCategory}
-          onConfirm={handleDeleteCategory}
-          onCancel={() => !deleteLoading && setDeleteCategory(null)}
-          title="Usuń kategorię"
-          message={
-            deleteCategory
-              ? `Czy na pewno chcesz usunąć kategorię „${deleteCategory.name}"? Notatki z tej kategorii zostaną przeniesione do kategorii nadrzędnej (lub będą widoczne tylko w „Wszystkie notatki", jeśli brak nadrzędnej).`
-              : ""
-          }
-          confirmText="Usuń"
-          cancelText="Anuluj"
-          variant="danger"
-          loading={deleteLoading}
-        />
-      </SidebarActionsWrapper>
-      <SidebarActionsWrapper flex>
-        <h2 style={{width: '100%'}}>Micro-Jira</h2>
-        <Button variant="tertiary" fullWidth onClick={() => setBoardCategoryEditorOpen(true)}>
-          Add Board Category
-        </Button>
-        <Button variant="tertiary" fullWidth onClick={() => setBoardEditorOpen(true)}>
-          Add Board
-        </Button>
-        <CategoriesList>
+      <SidebarSection>
+        <SectionHeader>
+          <SectionLabel>Notatki</SectionLabel>
+          <SectionActions>
+            <AddButton title="Dodaj kategorię" onClick={() => setCategoryEditorOpen(true)}>
+              <PlusIcon />
+            </AddButton>
+            <AddButton title="Nowa notatka" onClick={() => setEditorOpen(true)}>
+              <NotePlusIcon />
+            </AddButton>
+          </SectionActions>
+        </SectionHeader>
+        <SectionContent>
+          {tree.map((node) => (
+            <CategoryTreeItem
+              key={node.id}
+              node={node}
+              selectedCategoryId={selectedCategoryId}
+              onSelect={(id) => handleNotesSelect(id)}
+              onDelete={setDeleteCategory}
+            />
+          ))}
+          <div style={{width: '100%', height: '1px', background: 'rgba(255,255,255,0.14)', margin: '6px 0'}}></div>
           <TreeItem
-            label="Wszystkie tablice"
-            onHeaderClick={() => {}}
-          >
+            label="Wszystkie notatki"
+            onClick={() => handleNotesSelect(null)}
+          />
+        </SectionContent>
+      </SidebarSection>
+
+      <SidebarSection>
+        <SectionHeader>
+          <SectionLabel>Tablice</SectionLabel>
+          <SectionActions>
+            <AddButton title="Dodaj kategorię tablic" onClick={() => setBoardCategoryEditorOpen(true)}>
+              <PlusIcon />
+            </AddButton>
+            <AddButton title="Dodaj tablicę" onClick={() => setBoardEditorOpen(true)}>
+              <BoardPlusIcon />
+            </AddButton>
+          </SectionActions>
+        </SectionHeader>
+        <SectionContent>
+          <TreeItem label="Wszystkie tablice" onHeaderClick={() => {}}>
             <BoardsList>
               {boards.map((board) => (
                 <div key={board.id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -391,79 +428,114 @@ const SidebarActions = () => {
               onDeleteBoard={setDeleteBoard}
             />
           ))}
-        </CategoriesList>
-        <BoardCategoryEditorModal
-          isOpen={boardCategoryEditorOpen}
-          onClose={() => setBoardCategoryEditorOpen(false)}
-          onSuccess={() => {
-            setBoardCategoryEditorOpen(false);
-            refreshBoardCategories();
-          }}
-        />
-        <BoardEditorModal
-          isOpen={boardEditorOpen}
-          onClose={() => setBoardEditorOpen(false)}
-          onSuccess={() => {
-            setBoardEditorOpen(false);
-            refreshBoardCategories();
-            refreshBoards();
-          }}
-        />
-        <ConfirmDialog
-          isOpen={!!deleteBoardCategory}
-          onConfirm={handleDeleteBoardCategory}
-          onCancel={() => !deleteBoardCategoryLoading && setDeleteBoardCategory(null)}
-          title="Usuń kategorię tablic"
-          message={
-            deleteBoardCategory
-              ? `Czy na pewno chcesz usunąć kategorię „${deleteBoardCategory.name}"?`
-              : ""
-          }
-          confirmText="Usuń"
-          cancelText="Anuluj"
-          variant="danger"
-          loading={deleteBoardCategoryLoading}
-        />
-        <ConfirmDialog
-          isOpen={!!deleteBoard}
-          onConfirm={handleDeleteBoard}
-          onCancel={() => !deleteBoardLoading && setDeleteBoard(null)}
-          title="Usuń tablicę"
-          message={
-            deleteBoard
-              ? `Czy na pewno chcesz usunąć tablicę „${deleteBoard.name}"? Wszystkie zadania zostaną usunięte.`
-              : ""
-          }
-          confirmText="Usuń"
-          cancelText="Anuluj"
-          variant="danger"
-          loading={deleteBoardLoading}
-        />
-      </SidebarActionsWrapper>
-      <SidebarActionsWrapper flex>
-        <h2 style={{ width: '100%' }}>Time Tracker</h2>
-        <Button variant="secondary" fullWidth onClick={handleGoToTimeTracker}>
-          Open Week View
-        </Button>
-      </SidebarActionsWrapper>
-      <SidebarActionsWrapper flex>
-        <h2 style={{ width: '100%' }}>Archiwum</h2>
-        <CategoriesList>
-          {archivedBoards.length === 0 ? (
-            <div style={{ padding: '4px 0', fontSize: 13, color: 'var(--colors-textSecondary)' }}>
-              Brak zarchiwizowanych tablic
-            </div>
+          <div style={{width: '100%', height: '1px', background: 'rgba(255,255,255,0.14)', margin: '6px 0'}}></div>
+          <TreeItem label="Time Tracker" onClick={() => navigate('/time-tracker')} />
+        </SectionContent>
+      </SidebarSection>
+
+      <SidebarSection>
+        <SectionHeader>
+          <SectionLabel>Nawigacja</SectionLabel>
+        </SectionHeader>
+        <SectionContent>
+          {archivedBoards.length > 0 ? (
+            <TreeItem
+              label={`Archiwum (${archivedBoards.length})`}
+              onHeaderClick={() => {}}
+            >
+              <BoardsList>
+                {archivedBoards.map((board) => (
+                  <BoardLink key={board.id} to={`/board/${board.id}`}>
+                    {board.name}
+                  </BoardLink>
+                ))}
+              </BoardsList>
+            </TreeItem>
           ) : (
-            <BoardsList>
-              {archivedBoards.map((board) => (
-                <BoardLink key={board.id} to={`/board/${board.id}`}>
-                  {board.name}
-                </BoardLink>
-              ))}
-            </BoardsList>
+            <TreeItem label="Archiwum" onClick={() => {}} />
           )}
-        </CategoriesList>
-      </SidebarActionsWrapper>
+        </SectionContent>
+      </SidebarSection>
+
+      <NoteEditorModal
+        isOpen={editorOpen}
+        onClose={() => setEditorOpen(false)}
+        onSuccess={() => {
+          setEditorOpen(false);
+          refreshNotes();
+        }}
+        note={null}
+      />
+      <CategoryEditorModal
+        isOpen={categoryEditorOpen}
+        onClose={() => setCategoryEditorOpen(false)}
+        onSuccess={() => {
+          setCategoryEditorOpen(false);
+          refreshCategories();
+        }}
+      />
+      <BoardCategoryEditorModal
+        isOpen={boardCategoryEditorOpen}
+        onClose={() => setBoardCategoryEditorOpen(false)}
+        onSuccess={() => {
+          setBoardCategoryEditorOpen(false);
+          refreshBoardCategories();
+        }}
+      />
+      <BoardEditorModal
+        isOpen={boardEditorOpen}
+        onClose={() => setBoardEditorOpen(false)}
+        onSuccess={() => {
+          setBoardEditorOpen(false);
+          refreshBoardCategories();
+          refreshBoards();
+        }}
+      />
+      <ConfirmDialog
+        isOpen={!!deleteCategory}
+        onConfirm={handleDeleteCategory}
+        onCancel={() => !deleteLoading && setDeleteCategory(null)}
+        title="Usuń kategorię"
+        message={
+          deleteCategory
+            ? `Czy na pewno chcesz usunąć kategorię „${deleteCategory.name}"? Notatki z tej kategorii zostaną przeniesione do kategorii nadrzędnej (lub będą widoczne tylko w „Wszystkie notatki", jeśli brak nadrzędnej).`
+            : ""
+        }
+        confirmText="Usuń"
+        cancelText="Anuluj"
+        variant="danger"
+        loading={deleteLoading}
+      />
+      <ConfirmDialog
+        isOpen={!!deleteBoardCategory}
+        onConfirm={handleDeleteBoardCategory}
+        onCancel={() => !deleteBoardCategoryLoading && setDeleteBoardCategory(null)}
+        title="Usuń kategorię tablic"
+        message={
+          deleteBoardCategory
+            ? `Czy na pewno chcesz usunąć kategorię „${deleteBoardCategory.name}"?`
+            : ""
+        }
+        confirmText="Usuń"
+        cancelText="Anuluj"
+        variant="danger"
+        loading={deleteBoardCategoryLoading}
+      />
+      <ConfirmDialog
+        isOpen={!!deleteBoard}
+        onConfirm={handleDeleteBoard}
+        onCancel={() => !deleteBoardLoading && setDeleteBoard(null)}
+        title="Usuń tablicę"
+        message={
+          deleteBoard
+            ? `Czy na pewno chcesz usunąć tablicę „${deleteBoard.name}"? Wszystkie zadania zostaną usunięte.`
+            : ""
+        }
+        confirmText="Usuń"
+        cancelText="Anuluj"
+        variant="danger"
+        loading={deleteBoardLoading}
+      />
     </>
   );
 };

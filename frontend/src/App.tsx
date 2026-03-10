@@ -36,9 +36,9 @@ const App: React.FC = () => {
                         collapsible
                         resizable
                         header={<span style={{ fontWeight: 600 }}>Notepad</span>}
+                        footer={<SidebarAuth />}
                       >
                         <SidebarActions />
-                        <SidebarAuth />
                       </Sidebar>
                     }
                   >
