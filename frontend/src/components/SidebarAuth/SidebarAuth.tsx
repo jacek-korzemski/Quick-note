@@ -20,14 +20,8 @@ const UserName = styled.span`
   text-overflow: ellipsis;
   white-space: nowrap;
   text-transform: capitalize;
-`;
-
-const UserEmail = styled.span`
-  font-size: ${({ theme }) => theme.fontSize.sm};
-  color: ${({ theme }) => theme.colors.textSecondary};
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  width: 100%;
+  text-align: center;
 `;
 
 const SidebarAuth: React.FC = () => {
@@ -45,7 +39,6 @@ const SidebarAuth: React.FC = () => {
       <UserInfo>
         <div>
           <UserName>{user.username}</UserName>
-          <UserEmail>{user.email}</UserEmail>
         </div>
         <Button variant="ghost" size="sm" fullWidth onClick={() => logout()}>
           Wyloguj

@@ -99,10 +99,14 @@ echo Generowanie .htaccess dla SPA w build\...
 (
   echo RewriteEngine On
   echo RewriteBase %BASE_PATH%/
-  echo RewriteRule ^index\.html$ - [L]
-  echo RewriteCond %%{REQUEST_FILENAME} !-f
-  echo RewriteCond %%{REQUEST_FILENAME} !-d
-  echo RewriteRule . %BASE_PATH%/index.html [L]
+  echo(
+  echo # jeśli istnieje realny plik lub katalog, to go podaj ^(nie ruszaj^)
+  echo RewriteCond %%{REQUEST_FILENAME} -f [OR]
+  echo RewriteCond %%{REQUEST_FILENAME} -d
+  echo RewriteRule ^ - [L]
+  echo(
+  echo # w przeciwnym razie wszystko kieruj do index.html ^(SPA routes^)
+  echo RewriteRule ^ index.html [L]
 ) > "build\.htaccess"
 
 echo.
