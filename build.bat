@@ -103,10 +103,10 @@ echo Generowanie .htaccess dla SPA w build\...
   echo # jeśli istnieje realny plik lub katalog, to go podaj ^(nie ruszaj^)
   echo RewriteCond %%{REQUEST_FILENAME} -f [OR]
   echo RewriteCond %%{REQUEST_FILENAME} -d
-  echo RewriteRule ^ - [L]
+  echo RewriteRule ^^ - [L]
   echo(
   echo # w przeciwnym razie wszystko kieruj do index.html ^(SPA routes^)
-  echo RewriteRule ^ index.html [L]
+  echo RewriteRule ^^ index.html [L]
 ) > "build\.htaccess"
 
 echo.
