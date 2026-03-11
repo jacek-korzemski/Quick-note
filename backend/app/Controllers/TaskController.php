@@ -14,6 +14,38 @@ class TaskController {
         header('Content-Type: application/json');
         header('Access-Control-Allow-Origin: *');
         echo json_encode($data);
+
+        // Proste, tymczasowe logowanie dla debugowania 403 w środowisku biurowym
+        // Loguje tylko, gdy DEBUG >= 3, aby ograniczyć szum.
+        try {
+            $debug = (int) ($f3->get('DEBUG') ?? 0);
+            if ($debug >= 3) {
+                $ip = $f3->get('IP');
+                $method = $f3->get('VERB');
+                $uri = $f3->get('URI');
+                $userId = null;
+                $token = $this->getToken($f3);
+                if ($token) {
+                    $user = new User($f3->get('DB'));
+                    if ($user->findByToken($token)) {
+                        $userId = (int) $user->id;
+                    }
+                }
+                $line = sprintf(
+                    "[%s] %s %s %s status=%d user_id=%s\n",
+                    date('Y-m-d H:i:s'),
+                    $ip ?: '-',
+                    $method ?: '-',
+                    $uri ?: '-',
+                    $status,
+                    $userId !== null ? (string) $userId : '-'
+                );
+                $logDir = realpath(__DIR__ . '/../../data') ?: (__DIR__ . '/../../data');
+                @file_put_contents($logDir . '/tasks_index.log', $line, FILE_APPEND);
+            }
+        } catch (\Throwable $e) {
+            // Ignoruj błędy logowania, nie mogą wpływać na API
+        }
     }
 
     private function getBody(): array {

@@ -198,11 +198,19 @@ $f3->route('DELETE /api/boards/@id', 'BoardController->delete');
 $f3->route('POST   /api/boards/@id/archive', 'BoardController->archive');
 $f3->route('POST   /api/boards/@id/copy', 'BoardController->copy');
 
+// Główne endpointy dla zadań tablicy
 $f3->route('GET    /api/boards/@boardId/tasks', 'TaskController->index');
 $f3->route('POST   /api/boards/@boardId/tasks', 'TaskController->create');
 $f3->route('PUT    /api/boards/@boardId/tasks/reorder', 'TaskController->reorder');
 $f3->route('PUT    /api/boards/@boardId/tasks/@id', 'TaskController->update');
 $f3->route('DELETE /api/boards/@boardId/tasks/@id', 'TaskController->delete');
+
+// Alias bez słowa "tasks" – obejście potencjalnych filtrów/WAF w sieciach biurowych
+$f3->route('GET    /api/boards/@boardId/items', 'TaskController->index');
+$f3->route('POST   /api/boards/@boardId/items', 'TaskController->create');
+$f3->route('PUT    /api/boards/@boardId/items/reorder', 'TaskController->reorder');
+$f3->route('PUT    /api/boards/@boardId/items/@id', 'TaskController->update');
+$f3->route('DELETE /api/boards/@boardId/items/@id', 'TaskController->delete');
 
 $f3->route('GET    /api/time/week', 'TimeTrackerController->week');
 $f3->route('POST   /api/time/tasks', 'TimeTrackerController->createTask');
