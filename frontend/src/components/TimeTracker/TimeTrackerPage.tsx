@@ -165,14 +165,25 @@ const DroppableSlot: React.FC<{ dayIndex: number; slotIndex: number }> = ({ dayI
 };
 
 interface DraggableTimeEntryProps {
+  blockId: string;
   entry: ReturnType<typeof useTimeTracker>['entries'][number];
   top: number;
   height: number;
+  leftPercent: number;
+  widthPercent: number;
   onEdit: () => void;
 }
 
-const DraggableTimeEntry: React.FC<DraggableTimeEntryProps> = ({ entry, top, height, onEdit }) => {
-  const id = `time-entry-${entry.id}`;
+const DraggableTimeEntry: React.FC<DraggableTimeEntryProps> = ({
+  blockId,
+  entry,
+  top,
+  height,
+  leftPercent,
+  widthPercent,
+  onEdit,
+}) => {
+  const id = blockId;
   const { attributes, listeners, setNodeRef: setDragRef, transform, isDragging } = useDraggable({
     id,
     data: { entry },
@@ -195,7 +206,13 @@ const DraggableTimeEntry: React.FC<DraggableTimeEntryProps> = ({ entry, top, hei
   return (
     <EntryBlock
       ref={setNodeRef}
-      style={{ top, height, ...style }}
+      style={{
+        top,
+        height,
+        left: `calc(${leftPercent}% + 4px)`,
+        width: `calc(${widthPercent}% - 8px)`,
+        ...style,
+      }}
       $isDragging={isDragging}
       $isOver={isOver}
       onClick={(e) => {
@@ -239,16 +256,189 @@ const TimeTrackerPage: React.FC = () => {
   };
 
   const entriesByDay = useMemo(() => {
-    const map: Record<number, typeof entries> = { 0: [], 1: [], 2: [], 3: [], 4: [] };
-    entries.forEach((entry) => {
-      const start = new Date(entry.start_datetime.replace(' ', 'T'));
-      const index = start.getDay() - 1; // 0=Mon
-      if (index >= 0 && index < 5) {
-        map[index].push(entry);
-      }
+    type ParsedEntry = {
+      entry: (typeof entries)[number];
+      start: Date;
+      end: Date;
+    };
+    type TaskInterval = {
+      taskId: number;
+      start: Date;
+      end: Date;
+    };
+    type DayEntry = {
+      entry: (typeof entries)[number];
+      top: number;
+      height: number;
+      leftPercent: number;
+      widthPercent: number;
+      blockId: string;
+    };
+
+    const map: Record<number, DayEntry[]> = { 0: [], 1: [], 2: [], 3: [], 4: [] };
+    const parsed: ParsedEntry[] = entries
+      .map((entry) => ({
+        entry,
+        start: new Date(entry.start_datetime.replace(' ', 'T')),
+        end: new Date(entry.end_datetime.replace(' ', 'T')),
+      }))
+      .filter(({ start, end }) => end > start);
+
+    const mergedByTask = new Map<number, TaskInterval[]>();
+    parsed.forEach((item) => {
+      const taskId = item.entry.task_id;
+      const current = mergedByTask.get(taskId) ?? [];
+      current.push({ taskId, start: item.start, end: item.end });
+      mergedByTask.set(taskId, current);
     });
+
+    const taskIntervals: TaskInterval[] = [];
+    mergedByTask.forEach((intervals, taskId) => {
+      const sorted = intervals
+        .slice()
+        .sort((a, b) => a.start.getTime() - b.start.getTime() || b.end.getTime() - a.end.getTime());
+      const merged: TaskInterval[] = [];
+      sorted.forEach((interval) => {
+        const last = merged[merged.length - 1];
+        if (!last || interval.start > last.end) {
+          merged.push({ taskId, start: interval.start, end: interval.end });
+          return;
+        }
+        if (interval.end > last.end) {
+          last.end = interval.end;
+        }
+      });
+      taskIntervals.push(...merged);
+    });
+
+    const intervalsByTask = new Map<number, TaskInterval[]>();
+    taskIntervals.forEach((interval) => {
+      const current = intervalsByTask.get(interval.taskId) ?? [];
+      current.push(interval);
+      intervalsByTask.set(interval.taskId, current);
+    });
+
+    const tasks = Array.from(intervalsByTask.keys());
+    const taskOverlaps = (taskA: number, taskB: number) => {
+      const aIntervals = intervalsByTask.get(taskA) ?? [];
+      const bIntervals = intervalsByTask.get(taskB) ?? [];
+      for (const a of aIntervals) {
+        for (const b of bIntervals) {
+          if (a.start < b.end && b.start < a.end) return true;
+        }
+      }
+      return false;
+    };
+
+    const adjacency = new Map<number, number[]>();
+    tasks.forEach((taskId) => adjacency.set(taskId, []));
+    for (let i = 0; i < tasks.length; i += 1) {
+      for (let j = i + 1; j < tasks.length; j += 1) {
+        if (!taskOverlaps(tasks[i], tasks[j])) continue;
+        adjacency.get(tasks[i])?.push(tasks[j]);
+        adjacency.get(tasks[j])?.push(tasks[i]);
+      }
+    }
+
+    const taskBounds = new Map<number, { startMs: number; endMs: number }>();
+    intervalsByTask.forEach((intervals, taskId) => {
+      const startMs = Math.min(...intervals.map((interval) => interval.start.getTime()));
+      const endMs = Math.max(...intervals.map((interval) => interval.end.getTime()));
+      taskBounds.set(taskId, { startMs, endMs });
+    });
+
+    const visited = new Set<number>();
+    const layoutByTaskId = new Map<number, { column: number; columnsCount: number }>();
+
+    tasks.forEach((taskId) => {
+      if (visited.has(taskId)) return;
+      const componentTaskIds: number[] = [];
+      const stack = [taskId];
+      visited.add(taskId);
+      while (stack.length > 0) {
+        const currentId = stack.pop();
+        if (currentId == null) continue;
+        componentTaskIds.push(currentId);
+        const neighbors = adjacency.get(currentId) ?? [];
+        neighbors.forEach((neighborId) => {
+          if (visited.has(neighborId)) return;
+          visited.add(neighborId);
+          stack.push(neighborId);
+        });
+      }
+
+      const componentEntries = componentTaskIds
+        .map((id) => {
+          const bounds = taskBounds.get(id);
+          if (!bounds) return null;
+          return { taskId: id, startMs: bounds.startMs, endMs: bounds.endMs };
+        })
+        .filter((item): item is { taskId: number; startMs: number; endMs: number } => Boolean(item))
+        .sort((a, b) => a.startMs - b.startMs || b.endMs - a.endMs || a.taskId - b.taskId);
+
+      const assignment = new Map<number, number>();
+      const active: Array<{ endMs: number; column: number }> = [];
+      let maxColumns = 1;
+
+      componentEntries.forEach((item) => {
+        for (let i = active.length - 1; i >= 0; i -= 1) {
+          if (active[i].endMs <= item.startMs) {
+            active.splice(i, 1);
+          }
+        }
+
+        const usedColumns = new Set(active.map((a) => a.column));
+        let column = 0;
+        while (usedColumns.has(column)) {
+          column += 1;
+        }
+
+        assignment.set(item.taskId, column);
+        active.push({ endMs: item.endMs, column });
+        if (active.length > maxColumns) {
+          maxColumns = active.length;
+        }
+      });
+
+      componentTaskIds.forEach((id) => {
+        layoutByTaskId.set(id, {
+          column: assignment.get(id) ?? 0,
+          columnsCount: maxColumns,
+        });
+      });
+    });
+
+    for (let dayIndex = 0; dayIndex < 5; dayIndex += 1) {
+      const dayStart = new Date(currentWeekStart);
+      dayStart.setDate(dayStart.getDate() + dayIndex);
+      dayStart.setHours(START_HOUR, 0, 0, 0);
+      const dayEnd = new Date(dayStart);
+      dayEnd.setHours(END_HOUR, 0, 0, 0);
+
+      parsed.forEach((item) => {
+        if (item.end <= dayStart || item.start >= dayEnd) return;
+
+        const visibleStart = item.start > dayStart ? item.start : dayStart;
+        const visibleEnd = item.end < dayEnd ? item.end : dayEnd;
+        if (visibleEnd <= visibleStart) return;
+
+        const topMinutes = (visibleStart.getTime() - dayStart.getTime()) / (60 * 1000);
+        const heightMinutes = (visibleEnd.getTime() - visibleStart.getTime()) / (60 * 1000);
+        const layout = layoutByTaskId.get(item.entry.task_id) ?? { column: 0, columnsCount: 1 };
+
+        map[dayIndex].push({
+          entry: item.entry,
+          top: (topMinutes / 30) * SLOT_HEIGHT,
+          height: (heightMinutes / 30) * SLOT_HEIGHT,
+          leftPercent: (layout.column / layout.columnsCount) * 100,
+          widthPercent: 100 / layout.columnsCount,
+          blockId: `time-entry-${item.entry.id}-${dayIndex}`,
+        });
+      });
+    }
+
     return map;
-  }, [entries]);
+  }, [entries, currentWeekStart]);
 
   const handleOpenEdit = (taskId: number) => {
     const taskEntries = entries.filter((e) => e.task_id === taskId);
@@ -294,7 +484,9 @@ const TimeTrackerPage: React.FC = () => {
     if (!over) return;
     const activeIdStr = String(active.id);
     if (!activeIdStr.startsWith('time-entry-')) return;
-    const entryId = Number(activeIdStr.replace(/^time-entry-/, ''));
+    const entryMatch = activeIdStr.match(/^time-entry-(\d+)(?:-\d+)?$/);
+    if (!entryMatch) return;
+    const entryId = Number(entryMatch[1]);
     if (Number.isNaN(entryId)) return;
 
     const activeEntry = entries.find((e) => e.id === entryId);
@@ -395,22 +587,17 @@ const TimeTrackerPage: React.FC = () => {
                     style={{ top: (hourIdx + 1) * SLOTS_PER_HOUR * SLOT_HEIGHT }}
                   />
                 ))}
-                {entriesByDay[dayIndex]?.map((entry) => {
-                  const start = new Date(entry.start_datetime.replace(' ', 'T'));
-                  const end = new Date(entry.end_datetime.replace(' ', 'T'));
-                  const startMinutes = start.getHours() * 60 + start.getMinutes();
-                  const fromStart = startMinutes - START_HOUR * 60;
-                  const topSlots = fromStart / 30;
-                  const heightSlots = (end.getTime() - start.getTime()) / (30 * 60 * 1000);
-                  const top = topSlots * SLOT_HEIGHT;
-                  const height = heightSlots * SLOT_HEIGHT;
+                {entriesByDay[dayIndex]?.map((entryPlacement) => {
                   return (
                     <DraggableTimeEntry
-                      key={entry.id}
-                      entry={entry}
-                      top={top}
-                      height={height}
-                      onEdit={() => handleOpenEdit(entry.task_id)}
+                      key={entryPlacement.blockId}
+                      blockId={entryPlacement.blockId}
+                      entry={entryPlacement.entry}
+                      top={entryPlacement.top}
+                      height={entryPlacement.height}
+                      leftPercent={entryPlacement.leftPercent}
+                      widthPercent={entryPlacement.widthPercent}
+                      onEdit={() => handleOpenEdit(entryPlacement.entry.task_id)}
                     />
                   );
                 })}
