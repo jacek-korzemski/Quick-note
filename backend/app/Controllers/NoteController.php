@@ -88,6 +88,7 @@ class NoteController {
         $note->user_id = (int) $user->id;
         $note->created_at = date('Y-m-d H:i:s');
         $note->updated_at = null;
+        $note->position = $note->getMaxPosition((int) $user->id, $categoryId);
         $note->save();
 
         $this->json($f3, ['note' => $note->toArray()], 201);
@@ -168,5 +169,39 @@ class NoteController {
 
         $note->erase();
         $this->json($f3, ['message' => 'Notatka została usunięta.']);
+    }
+
+    public function reorder(\Base $f3): void {
+        $user = $this->getCurrentUser($f3);
+        if (!$user) {
+            $this->json($f3, ['error' => 'Brak autoryzacji.'], 401);
+            return;
+        }
+
+        $data = $this->getBody();
+        $noteIds = $data['note_ids'] ?? $data['noteIds'] ?? [];
+        if (!is_array($noteIds)) {
+            $this->json($f3, ['error' => 'Nieprawidłowe dane (note_ids).'], 400);
+            return;
+        }
+
+        $note = new Note($f3->get('DB'));
+        $userId = (int) $user->id;
+
+        foreach ($noteIds as $index => $noteId) {
+            $id = (int) $noteId;
+            if (!$id) continue;
+            if (!$note->findByIdAndUser($id, $userId)) {
+                continue;
+            }
+            $note->position = $index;
+            $note->save();
+        }
+
+        $note = new Note($f3->get('DB'));
+        $categoryId = $f3->get('GET.category_id');
+        $categoryId = $categoryId !== null && $categoryId !== '' ? (int) $categoryId : null;
+        $notes = $note->findByUser($userId, $categoryId);
+        $this->json($f3, ['notes' => $notes]);
     }
 }

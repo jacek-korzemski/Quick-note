@@ -123,6 +123,13 @@ try {
     }
 }
 try {
+    $db->exec("ALTER TABLE notes ADD COLUMN position INTEGER NOT NULL DEFAULT 0");
+} catch (Exception $e) {
+    if (strpos($e->getMessage(), 'duplicate column name') === false) {
+        throw $e;
+    }
+}
+try {
     $db->exec("ALTER TABLE boards ADD COLUMN archived_at TEXT");
 } catch (Exception $e) {
     if (strpos($e->getMessage(), 'duplicate column name') === false) {
@@ -177,6 +184,7 @@ $f3->route('GET  /api/auth/me', 'AuthController->me');
 
 $f3->route('GET    /api/notes', 'NoteController->index');
 $f3->route('POST   /api/notes', 'NoteController->create');
+$f3->route('PUT    /api/notes/reorder', 'NoteController->reorder');
 $f3->route('PUT    /api/notes/@id', 'NoteController->update');
 $f3->route('DELETE /api/notes/@id', 'NoteController->delete');
 

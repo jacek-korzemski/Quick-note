@@ -13,6 +13,7 @@ export interface Note {
   updated_at: string | null;
   user_id: number;
   category_id: number | null;
+  position?: number;
 }
 
 export interface ApiError {
@@ -64,6 +65,16 @@ export const notesApi = {
   delete(id: number) {
     return request<{ message: string }>(`/${id}`, {
       method: 'DELETE',
+    });
+  },
+
+  reorder(noteIds: number[], categoryId?: number | null) {
+    const params = new URLSearchParams();
+    if (categoryId != null) params.set('category_id', String(categoryId));
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return request<{ notes: Note[] }>(`/reorder${query}`, {
+      method: 'PUT',
+      body: JSON.stringify({ note_ids: noteIds }),
     });
   },
 };
