@@ -541,7 +541,7 @@ const TimeTrackerPage: React.FC = () => {
       <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
         <GridWrapper>
           <TimeColumn>
-            <DayHeader />
+            <DayHeader>-</DayHeader>
             {Array.from({ length: TOTAL_SLOTS }).map((_, idx) => {
               const hour = START_HOUR + Math.floor(idx / SLOTS_PER_HOUR);
               const minute = idx % SLOTS_PER_HOUR === 0 ? '00' : '30';
