@@ -12,7 +12,7 @@ const Modal: React.FC<ModalProps> = ({
   title,
   variant = 'center',
   showOverlay = true,
-  closeOnOverlayClick = true,
+  closeOnOverlayClick = false,
   closeOnEscape = true,
   showCloseButton = true,
   width,
