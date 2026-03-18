@@ -98,6 +98,31 @@ $db->exec([
         created_at TEXT NOT NULL,
         FOREIGN KEY (user_id) REFERENCES users(id),
         FOREIGN KEY (task_id) REFERENCES time_tasks(id)
+    )",
+    "CREATE TABLE IF NOT EXISTS article_categories (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        parent_id INTEGER,
+        user_id INTEGER NOT NULL,
+        FOREIGN KEY (parent_id) REFERENCES article_categories(id),
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    )",
+    "CREATE TABLE IF NOT EXISTS articles (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        content_html TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT,
+        locked_at TEXT,
+        user_id INTEGER NOT NULL,
+        article_category_id INTEGER REFERENCES article_categories(id),
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    )",
+    "CREATE TABLE IF NOT EXISTS article_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        article_id INTEGER NOT NULL,
+        saved_at TEXT NOT NULL,
+        FOREIGN KEY (article_id) REFERENCES articles(id)
     )"
 ]);
 
@@ -219,6 +244,17 @@ $f3->route('POST   /api/boards/@boardId/items', 'TaskController->create');
 $f3->route('PUT    /api/boards/@boardId/items/reorder', 'TaskController->reorder');
 $f3->route('PUT    /api/boards/@boardId/items/@id', 'TaskController->update');
 $f3->route('DELETE /api/boards/@boardId/items/@id', 'TaskController->delete');
+
+$f3->route('GET    /api/article-categories', 'ArticleCategoryController->index');
+$f3->route('POST   /api/article-categories', 'ArticleCategoryController->create');
+$f3->route('PUT    /api/article-categories/@id', 'ArticleCategoryController->update');
+$f3->route('DELETE /api/article-categories/@id', 'ArticleCategoryController->delete');
+
+$f3->route('GET    /api/articles', 'ArticleController->index');
+$f3->route('GET    /api/articles/@id', 'ArticleController->getOne');
+$f3->route('POST   /api/articles', 'ArticleController->create');
+$f3->route('PUT    /api/articles/@id', 'ArticleController->update');
+$f3->route('DELETE /api/articles/@id', 'ArticleController->delete');
 
 $f3->route('GET    /api/time/week', 'TimeTrackerController->week');
 $f3->route('POST   /api/time/tasks', 'TimeTrackerController->createTask');

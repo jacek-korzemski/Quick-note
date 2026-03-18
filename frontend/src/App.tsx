@@ -10,11 +10,14 @@ import { CategoriesProvider } from "@/context/CategoriesContext";
 import { NotesProvider } from "@/context/NotesContext";
 import { BoardCategoriesProvider } from "@/context/BoardCategoriesContext";
 import { TimeTrackerProvider } from "@/context/TimeTrackerContext";
+import { ArticleCategoriesProvider } from "@/context/ArticleCategoriesContext";
+import { ArticlesProvider } from "@/context/ArticlesContext";
 import SidebarAuth from "@/components/SidebarAuth/SidebarAuth";
 import SidebarActions from "@/components/SidebarActions/SidebarActions";
 import NotesContent from "@/components/NotesContent/NotesContent";
 import BoardView from "@/components/BoardView/BoardView";
 import TimeTrackerPage from "@/components/TimeTracker/TimeTrackerPage";
+import ArticlePage from "@/components/Articles/ArticlePage";
 
 const App: React.FC = () => {
   return (
@@ -25,7 +28,9 @@ const App: React.FC = () => {
           <CategoriesProvider>
             <NotesProvider>
               <BoardCategoriesProvider>
-                <TimeTrackerProvider>
+                <ArticleCategoriesProvider>
+                  <ArticlesProvider>
+                    <TimeTrackerProvider>
                   <SidebarLayout
                     leftSidebar={
                       <Sidebar
@@ -46,9 +51,12 @@ const App: React.FC = () => {
                       <Route path="/" element={<NotesContent />} />
                       <Route path="/board/:boardId" element={<BoardView />} />
                       <Route path="/time-tracker" element={<TimeTrackerPage />} />
+                      <Route path="/articles/:articleId" element={<ArticlePage />} />
                     </Routes>
                   </SidebarLayout>
-                </TimeTrackerProvider>
+                    </TimeTrackerProvider>
+                  </ArticlesProvider>
+                </ArticleCategoriesProvider>
               </BoardCategoriesProvider>
             </NotesProvider>
           </CategoriesProvider>
