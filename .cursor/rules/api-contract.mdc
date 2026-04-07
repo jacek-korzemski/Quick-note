@@ -1,0 +1,97 @@
+---
+description: Kontrakt API — formaty żądań i odpowiedzi między frontendem a backendem
+globs: backend/app/Controllers/**/*.php, frontend/src/api/**/*.ts
+alwaysApply: false
+---
+
+# API Contract
+
+## Ogólne zasady
+
+- Wszystkie endpointy pod prefiksem `/api/`
+- Komunikacja: JSON (`Content-Type: application/json`)
+- Autoryzacja: `Authorization: Bearer <token>` (token z localStorage)
+- Metody HTTP: GET (odczyt), POST (tworzenie), PUT (aktualizacja/reorder), PATCH (częściowa aktualizacja), DELETE (usuwanie)
+
+## Format odpowiedzi
+
+### Sukces — lista:
+```json
+{ "notes": [...] }
+{ "boards": [...] }
+{ "tasks": [...] }
+```
+
+### Sukces — pojedynczy zasób:
+```json
+{ "note": { "id": 1, "title": "..." } }
+{ "board": { "id": 1, "name": "..." } }
+```
+
+### Sukces — tworzenie (status 201):
+```json
+{ "note": { "id": 2, "title": "..." } }
+```
+
+### Sukces — usuwanie:
+```json
+{ "message": "Notatka została usunięta." }
+```
+
+### Błąd:
+```json
+{ "error": "Brak autoryzacji." }
+{ "error": "Tytuł jest wymagany." }
+```
+
+Kody HTTP: 400 (walidacja), 401 (brak autoryzacji), 403 (brak dostępu), 404 (nie znaleziono), 409 (konflikt), 500 (błąd serwera).
+
+## Nazewnictwo kluczy
+
+Zawsze **snake_case** w JSON:
+- `category_id`, `board_category_id`, `user_id`
+- `created_at`, `updated_at`, `archived_at`
+- `note_ids`, `task_ids`
+- `content_html`, `start_datetime`, `end_datetime`
+
+## Endpointy — wzorce
+
+### CRUD:
+```
+GET    /api/resource          → { "resources": [...] }
+POST   /api/resource          → { "resource": {...} }  (201)
+PUT    /api/resource/@id      → { "resource": {...} }
+DELETE /api/resource/@id      → { "message": "..." }
+```
+
+### Reorder (drag & drop):
+```
+PUT /api/notes/reorder       body: { "note_ids": [3, 1, 2] }
+PUT /api/boards/@boardId/tasks/reorder  body: { "status": "todo", "task_ids": [5, 3] }
+```
+
+### Nested resources:
+```
+GET /api/boards/@boardId/tasks     → { "tasks": [...] }
+POST /api/boards/@boardId/tasks    → { "task": {...} }
+```
+
+### Special:
+```
+POST /api/boards/@id/archive      → archiwizacja tablicy
+POST /api/boards/@id/copy         → kopia tablicy z archiwum
+GET  /api/time/week?date=...      → wpisy tygodnia time trackera
+```
+
+## Alias WAF
+
+Endpointy `/api/boards/@boardId/tasks` mają alias `/api/boards/@boardId/items` — obejście filtrów WAF w sieciach biurowych. Frontend używa `/items`.
+
+## Auth flow
+
+1. `POST /api/auth/register` — `{ username, email, password }` → `{ user, token }`
+2. `POST /api/auth/login` — `{ email, password }` → `{ user, token }`
+3. `GET /api/auth/me` — Bearer token → `{ user }` (weryfikacja sesji)
+4. `POST /api/auth/logout` — Bearer token → `{ message }` (kasuje token w DB)
+
+Frontend zapisuje token w `localStorage` pod kluczem `auth_token`.

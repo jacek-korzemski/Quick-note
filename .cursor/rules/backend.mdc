@@ -1,0 +1,149 @@
+---
+description: Konwencje i wzorce backendu PHP (Fat-Free Framework + SQLite)
+globs: backend/**/*.php, backend/**/*.ini
+alwaysApply: false
+---
+
+# Backend — Fat-Free Framework + SQLite
+
+## Framework
+
+- Fat-Free Framework (F3) — **bez Composera w runtime** (pliki frameworka bezpośrednio w `backend/`)
+- Autoloading klas przez `config.ini`: `AUTOLOAD=../app/Controllers/;../app/Models/`
+- PHP >= 7.2 (wymagane: pdo_sqlite, json, mbstring)
+
+## Routing
+
+Wszystkie route'y zdefiniowane w `public/index.php` na instancji `$f3`:
+
+```php
+$f3->route('VERB /api/resource', 'ControllerName->method');
+$f3->route('VERB /api/resource/@id', 'ControllerName->method');
+```
+
+- Prefiksy: zawsze `/api/...`
+- Parametry URL: `@id`, `@boardId` (F3 named tokens)
+- Globalna obsługa OPTIONS (preflight CORS) na początku `index.php`
+
+## Kontrolery (`app/Controllers/`)
+
+Każdy kontroler to osobna klasa PHP (bez namespace'ów).
+
+### Wzorzec obowiązkowy — metody prywatne (powtarzane w każdym kontrolerze):
+
+```php
+private function json($f3, $data, int $status = 200): void {
+    $f3->status($status);
+    header('Content-Type: application/json');
+    header('Access-Control-Allow-Origin: *');
+    echo json_encode($data);
+}
+
+private function getBody(): array {
+    $body = file_get_contents('php://input');
+    return json_decode($body, true) ?: [];
+}
+
+private function getToken($f3): ?string {
+    $auth = $f3->get('HEADERS.Authorization') ?? $f3->get('HEADERS.authorization') ?? '';
+    if (preg_match('/^Bearer\s+(.+)$/i', $auth, $matches)) {
+        return $matches[1];
+    }
+    return null;
+}
+
+private function getCurrentUser($f3): ?User {
+    $token = $this->getToken($f3);
+    if (!$token) return null;
+    $user = new User($f3->get('DB'));
+    return $user->findByToken($token) ? $user : null;
+}
+```
+
+### Wzorzec metody publicznej (endpoint):
+
+```php
+public function index(\Base $f3): void {
+    $user = $this->getCurrentUser($f3);
+    if (!$user) {
+        $this->json($f3, ['error' => 'Brak autoryzacji.'], 401);
+        return;
+    }
+    // ... logika ...
+    $this->json($f3, ['notes' => $notes]);
+}
+
+public function update(\Base $f3, array $params): void {
+    // $params['id'] — z URL @id
+}
+```
+
+### Kluczowe zasady:
+
+- Każda chroniona metoda zaczyna się od `getCurrentUser()` + sprawdzenie 401
+- Walidacja danych wejściowych → early return z `['error' => '...']` i kodem HTTP 400/404/409
+- Sukces: odpowiedź z kluczem nazwy zasobu — `['note' => ...]`, `['boards' => ...]`
+- Usuwanie: `['message' => '...']`
+- Komunikaty błędów po **polsku**: `'Brak autoryzacji.'`, `'Tytuł jest wymagany.'`, `'Notatka nie została znaleziona.'`
+
+## Modele (`app/Models/`)
+
+Każdy model rozszerza `\DB\SQL\Mapper`:
+
+```php
+class Note extends \DB\SQL\Mapper {
+    public function __construct(\DB\SQL $db) {
+        parent::__construct($db, 'notes');
+    }
+}
+```
+
+### Standardowe metody modelu:
+
+- `findByUser(int $userId, ...)` — zwraca `array` z `toArray()` dla każdego rekordu
+- `findByIdAndUser(int $id, int $userId): bool` — ładuje rekord, zwraca `!$this->dry()`
+- `toArray(): array` — serializacja do tablicy asocjacyjnej (z rzutowaniem typów, bez pól wrażliwych)
+- `getMaxPosition(...)` — dla sortowania (drag & drop)
+
+### ORM (F3 Mapper):
+
+- `$model->load(['warunek = ?', $value])` — ładuje jeden rekord
+- `$model->find(['warunek'], ['order' => '...'])` — zwraca tablicę mapperów
+- `$model->save()` — INSERT lub UPDATE
+- `$model->erase()` — DELETE
+- `$model->reset()` — czyści stan mappera przed INSERT
+- `$model->dry()` — `true` jeśli nie załadowano rekordu
+- Surowy SQL: `$this->db->exec('SELECT ...', [$param])`
+
+## Baza danych (SQLite)
+
+- Plik: `backend/data/notes.db`
+- Schemat: `CREATE TABLE IF NOT EXISTS` w `index.php` (bootstrap)
+- Migracje: `ALTER TABLE ... ADD COLUMN` w blokach `try/catch` (ignorowanie `duplicate column name`)
+- Kolumny: `snake_case` — `user_id`, `created_at`, `board_category_id`
+- Daty: `TEXT` w formacie `'Y-m-d H:i:s'` (PHP `date()`)
+- FK: deklarowane, ale bez `PRAGMA foreign_keys = ON`
+
+## Autoryzacja
+
+- Bearer token w nagłówku `Authorization: Bearer <token>`
+- Token generowany przez `bin2hex(random_bytes(32))`, przechowywany w `users.token`
+- Hasła: `password_hash()` / `password_verify()` (bcrypt)
+- Brak ról — autoryzacja per-zasób (ownership check: `findByIdAndUser`)
+
+## Styl kodu
+
+- Klasy: **PascalCase** (`NoteController`, `BoardCategory`)
+- Metody/właściwości: **camelCase** (`getCurrentUser`, `findByIdAndUser`)
+- Kolumny DB / klucze JSON: **snake_case** (`category_id`, `created_at`)
+- Wcięcia: **4 spacje**
+- Bez namespace'ów (F3 autoload z ścieżek)
+- Return type hints: `void`, `?User`, `int`, `array`, `bool`, `string`
+- Brak PHPDoc — typy wyrażone przez return types i parameter types
+
+## CORS
+
+Obsługiwany na 3 poziomach (redundancja dla pewności):
+1. Nagłówki na początku `index.php` (każdy request)
+2. Route OPTIONS z early exit
+3. Wewnątrz `json()` każdego kontrolera

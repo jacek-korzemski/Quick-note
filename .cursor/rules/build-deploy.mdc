@@ -1,0 +1,63 @@
+---
+description: Build i deployment — proces budowania i wdrażania aplikacji
+globs: build.bat, frontend/vite.config.ts, frontend/vite.config.js
+alwaysApply: false
+---
+
+# Build & Deployment
+
+## Proces budowania
+
+Skrypt `build.bat` przygotowuje folder `build/` gotowy do wgrania na serwer:
+
+1. Pyta o **subfolder** docelowy (np. `app/notes`) — pod tym ścieżką będzie żyła aplikacja na serwerze
+2. Ustawia zmienne środowiskowe Vite:
+   - `VITE_BASE` — base path dla SPA (np. `/app/notes/`)
+   - `VITE_API_BASE` — ścieżka do backendu (np. `/app/notes/backend/public`)
+   - `VITE_OUT_DIR` — `../build` (output poza `frontend/`)
+3. `npm ci` (jeśli brak `node_modules`) + `npm run build` w `frontend/`
+4. Kopiuje `backend/` do `build/backend/` (bez plików `.db`)
+5. Generuje `build/.htaccess` — SPA routing (RewriteRule → index.html)
+
+## Struktura `build/`
+
+```
+build/
+├── index.html              # SPA entry
+├── assets/                 # zbudowane JS/CSS
+├── .htaccess               # SPA rewrite rules
+└── backend/
+    ├── public/
+    │   ├── index.php       # API entry point
+    │   └── .htaccess       # API rewrite rules
+    └── data/               # pusty folder na SQLite DB
+```
+
+## Zmienne środowiskowe Vite
+
+| Zmienna | Dev (default) | Build |
+|---------|---------------|-------|
+| `VITE_BASE` | `/` | `/subfolder/` |
+| `VITE_API_BASE` | `''` (proxy) | `/subfolder/backend/public` |
+| `VITE_OUT_DIR` | `dist` | `../build` |
+
+## Vite config
+
+- `base`: z `VITE_BASE` env
+- `build.outDir`: z `VITE_OUT_DIR` env
+- Dev proxy: `/api` → `VITE_API_BASE` (default `http://localhost:8080`)
+- Aliasy: `@` → `src/`, `@components/`, `@hooks/`, `@styles/`
+
+## Deployment
+
+- Wgraj zawartość `build/` na serwer pod wskazany subfolder
+- Upewnij się, że `backend/data/` ma uprawnienia do zapisu (SQLite tworzy się automatycznie)
+- Wymagany: Apache z mod_rewrite (lub odpowiednik nginx)
+- Baza SQLite tworzy się automatycznie przy pierwszym requeście (CREATE TABLE IF NOT EXISTS)
+
+## Ważne
+
+- **Nie commituj** plików `.db` — są w `.gitignore`
+- **Nie commituj** `build/` — jest w `.gitignore`
+- **Nie commituj** `frontend/node_modules/` ani `frontend/dist/`
+- Folder `build/backend/data/` jest celowo pusty po buildzie

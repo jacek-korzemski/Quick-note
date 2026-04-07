@@ -1,0 +1,249 @@
+---
+description: Konwencje i wzorce frontendu React + TypeScript + styled-components
+globs: frontend/src/**/*.ts, frontend/src/**/*.tsx
+alwaysApply: false
+---
+
+# Frontend — React 19 + TypeScript + Vite
+
+## Stack technologiczny
+
+- **React 19** z hookami (bez komponentów klasowych)
+- **TypeScript** (strict mode) — wyłącznie `.ts`/`.tsx`, żadnych `.js`/`.jsx` w `src/`
+- **Vite 7** — bundler i dev server
+- **styled-components 6** — stylowanie (ThemeProvider + createGlobalStyle)
+- **react-router-dom 7** — routing (BrowserRouter, Routes, Route)
+- **@dnd-kit** — drag & drop (core, sortable, utilities)
+
+## Aliasy importów
+
+Zdefiniowane w `tsconfig.json` i `vite.config.ts`:
+
+```
+@/       → src/
+@components/ → src/components/
+@hooks/  → src/hooks/
+@styles/ → src/styles/
+```
+
+Preferuj `@/` w importach zamiast ścieżek relatywnych.
+
+## Struktura komponentów
+
+Każdy komponent ma własny folder:
+
+```
+components/
+  NoteEditorModal/
+    NoteEditorModal.tsx     # główny komponent
+  Button/
+    Button.tsx              # komponent
+    styles.ts               # styled-components
+    types.ts                # interfejsy props
+    IconButton.tsx           # warianty
+    ButtonGroup.tsx
+```
+
+Mniejsze/proste komponenty mogą być jednym plikiem w folderze.
+
+## Wzorce komponentów
+
+### Deklaracja komponentu:
+
+```tsx
+const NoteEditorModal: React.FC<NoteEditorModalProps> = ({ isOpen, onClose, onSuccess, note = null }) => {
+  // ...
+};
+
+export default NoteEditorModal;
+```
+
+lub named export:
+
+```tsx
+export const Button: React.FC<ButtonProps> = ({ children, variant = 'primary', ...props }) => {
+  // ...
+};
+```
+
+### Interfejsy props:
+
+```tsx
+interface NoteEditorModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSuccess: () => void;
+  note?: Note | null;
+}
+```
+
+### Stan formularzy — kontrolowane pola z useState:
+
+```tsx
+const [title, setTitle] = useState('');
+const [error, setError] = useState('');
+const [loading, setLoading] = useState(false);
+
+const handleSubmit = async (e: FormEvent) => {
+  e.preventDefault();
+  if (loading) return;
+  setError('');
+  setLoading(true);
+  try {
+    await notesApi.create({ title, content });
+    onSuccess();
+  } catch (err) {
+    setError(err instanceof Error ? err.message : 'Wystąpił błąd.');
+  } finally {
+    setLoading(false);
+  }
+};
+```
+
+Brak react-hook-form / Formik — wszystkie formularze ręcznie kontrolowane.
+
+## Styled-components
+
+### Transient props — prefiks `$`:
+
+```tsx
+// types.ts
+export interface StyledButtonProps {
+  $variant: ButtonVariant;
+  $size: ButtonSize;
+  $fullWidth?: boolean;
+}
+
+// styles.ts
+export const StyledButton = styled.button<StyledButtonProps>`
+  ${({ $variant }) => getVariantStyles($variant)}
+  ${({ $fullWidth }) => $fullWidth && css`width: 100%;`}
+`;
+
+// Button.tsx
+<StyledButton $variant={variant} $size={size} $fullWidth={fullWidth}>
+```
+
+### Dostęp do theme:
+
+```tsx
+const ErrorText = styled.div`
+  color: ${({ theme }) => theme.colors.error};
+  font-size: ${({ theme }) => theme.fontSize.md};
+  margin-bottom: ${({ theme }) => theme.spacing.md};
+`;
+```
+
+### Plik `styled.d.ts` rozszerza DefaultTheme — theme jest typowany.
+
+### Inline styled-components definiowane w tym samym pliku co komponent (dla małych, jednorazowych elementów):
+
+```tsx
+const MetaText = styled.div`
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: ${({ theme }) => theme.colors.textSecondary};
+`;
+```
+
+## Theme (`styles/theme.ts`)
+
+Obiekt `as const` z sekcjami:
+- `colors` — dark theme (VS Code-like): `primary`, `background`, `surface`, `text`, status colors
+- `spacing` — od `xxs` (2px) do `xxxl` (48px)
+- `borderRadius` — od `xs` (2px) do `full` (9999px)
+- `fontSize` — od `xs` (10px) do `title` (24px)
+- `fontWeight`, `fontFamily`, `shadows`, `transitions`, `zIndex`, `breakpoints`
+
+Zawsze używaj wartości z theme zamiast hardkodowanych. Wyjątek: jednorazowe inline wartości w pikselach w `style={{}}`.
+
+## API communication (`api/`)
+
+Każdy moduł API (`notes.ts`, `boards.ts`, `tasks.ts`, ...) zawiera:
+
+1. Lokalna funkcja `request<T>()` — wrapper na `fetch`:
+   - Dołącza `Authorization: Bearer` z `localStorage.getItem('auth_token')`
+   - `Content-Type: application/json`
+   - Parsuje JSON, rzuca `Error` z message z API lub polskim fallbackiem
+2. Typy/interfejsy zasobu (`Note`, `Task`, `Board`, `ApiError`)
+3. Eksportowany obiekt API: `notesApi`, `tasksApi`, `boardsApi`, etc.
+
+```tsx
+export const notesApi = {
+  getAll(categoryId?: number | null) {
+    return request<{ notes: Note[] }>(params);
+  },
+  create(data: { title: string; content: string }) {
+    return request<{ note: Note }>('', { method: 'POST', body: JSON.stringify(data) });
+  },
+  // ...
+};
+```
+
+**API_BASE_URL** pochodzi z `config.ts`: `import.meta.env.VITE_API_BASE ?? ''`
+
+## Context / State management
+
+- **Wyłącznie React Context** — brak Redux/Zustand
+- Każda domena ma własny Context + Provider + hook:
+
+```tsx
+const NotesContext = createContext<NotesContextType | null>(null);
+
+export function NotesProvider({ children }: { children: ReactNode }) {
+  // useState + useCallback + useEffect
+  return <NotesContext.Provider value={{ notes, loading, refreshNotes }}>{children}</NotesContext.Provider>;
+}
+
+export function useNotes() {
+  const context = useContext(NotesContext);
+  if (!context) throw new Error('useNotes must be used within a NotesProvider');
+  return context;
+}
+```
+
+Providery zagnieżdżone w `App.tsx`:
+`SnackbarProvider → AuthProvider → CategoriesProvider → NotesProvider → BoardCategoriesProvider → ArticleCategoriesProvider → ArticlesProvider → TimeTrackerProvider`
+
+## Routing (`App.tsx`)
+
+```tsx
+<BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '')}>
+  <Routes>
+    <Route path="/" element={<NotesContent />} />
+    <Route path="/board/:boardId" element={<BoardView />} />
+    <Route path="/time-tracker" element={<TimeTrackerPage />} />
+    <Route path="/articles/:articleId" element={<ArticlePage />} />
+  </Routes>
+</BrowserRouter>
+```
+
+## Styl kodu
+
+- Komponenty i typy: **PascalCase** (`NoteEditorModal`, `ButtonProps`)
+- Hooki: **camelCase** z prefiksem `use` (`useNotes`, `useAuth`)
+- Obiekty API: **camelCase** (`notesApi`, `tasksApi`)
+- Zmienne/funkcje: **camelCase** (`handleSubmit`, `categoryId`)
+- Pliki komponentów: **PascalCase.tsx** (`NoteEditorModal.tsx`)
+- Pliki utils/api/hooks: **camelCase.ts** (`notes.ts`, `useGetData.ts`)
+- Pliki stylów/typów: **camelCase.ts** (`styles.ts`, `types.ts`)
+- Wcięcia: **2 spacje**
+- Cudzysłowy: **single quotes** w importach (zdarzają się double — nie mieszaj w jednym pliku)
+- Importy `type`: używaj `type` keyword gdy importujesz tylko typy (`import type { Note }` lub `import { type Note }`)
+
+## Komponenty UI (primitives)
+
+Gotowe komponenty w `components/`:
+- **Button:** `Button`, `IconButton`, `TextButton`, `ButtonGroup` (warianty: primary, secondary, tertiary, ghost, danger, success; rozmiary: sm, md, lg)
+- **Form:** `Input`, `Textarea`, `Select`, `Checkbox`, `Radio`, `RadioGroup`, `MultiSelect`, `Switch`
+- **Modal:** `Modal`, `ConfirmDialog`
+- **Layout:** `Container`, `Row`, `Column`, `Grid`, `FlexItem`, `FullScreen`
+- **Sidebar:** `Sidebar`, `SidebarLayout`
+- **Loader:** `Loader`, `ContentLoader`, `PageLoader`, `Skeleton`, `Spinner`
+- **Collapsible:** `Collapsible`, `TreeItem`
+- **ContextMenu:** `ContextMenu`, `Submenu`
+- **Tooltip:** `Tooltip`
+- **Snackbar:** `SnackbarProvider`, `useSnackbar`
+- **Icon:** `ChevronIcon`, `CloseIcon`, `EditIcon`, `TrashIcon`, `MenuIcon`, etc.
+
+Przy tworzeniu nowych widoków **korzystaj z istniejących primitywów**.

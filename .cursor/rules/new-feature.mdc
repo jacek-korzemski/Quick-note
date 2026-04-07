@@ -1,0 +1,81 @@
+---
+description: Checklist dodawania nowej funkcjonalności (end-to-end)
+globs:
+alwaysApply: false
+---
+
+# Dodawanie nowej funkcjonalności — Checklist
+
+Przy dodawaniu nowej funkcji pamiętaj o pełnym przepływie backend → frontend.
+
+## 1. Backend — Baza danych
+
+- Dodaj `CREATE TABLE IF NOT EXISTS` w `public/index.php` (sekcja tworzenia tabel)
+- Jeśli modyfikujesz istniejącą tabelę → dodaj migrację `ALTER TABLE ... ADD COLUMN` w bloku `try/catch`:
+
+```php
+try {
+    $db->exec("ALTER TABLE tabela ADD COLUMN nowa_kolumna TYP DEFAULT wartość");
+} catch (Exception $e) {
+    if (strpos($e->getMessage(), 'duplicate column name') === false) {
+        throw $e;
+    }
+}
+```
+
+## 2. Backend — Model
+
+- Stwórz plik `app/Models/NazwaModelu.php`
+- Rozszerz `\DB\SQL\Mapper`
+- Dodaj: `findByUser()`, `findByIdAndUser()`, `toArray()`, ew. `getMaxPosition()`
+
+## 3. Backend — Kontroler
+
+- Stwórz plik `app/Controllers/NazwaController.php`
+- Skopiuj wzorzec prywatnych metod: `json()`, `getBody()`, `getToken()`, `getCurrentUser()`
+- Dodaj metody publiczne: `index()`, `create()`, `update()`, `delete()`, etc.
+- Każda chroniona metoda: sprawdź auth → waliduj dane → wykonaj logikę → odpowiedz JSON
+
+## 4. Backend — Routing
+
+- Dodaj route'y w `public/index.php` (przed `$f3->run()`):
+
+```php
+$f3->route('GET    /api/nowy-zasob', 'NowyController->index');
+$f3->route('POST   /api/nowy-zasob', 'NowyController->create');
+$f3->route('PUT    /api/nowy-zasob/@id', 'NowyController->update');
+$f3->route('DELETE /api/nowy-zasob/@id', 'NowyController->delete');
+```
+
+## 5. Frontend — API module
+
+- Stwórz `frontend/src/api/nowyZasob.ts`
+- Zdefiniuj interfejsy TypeScript
+- Zdefiniuj `request<T>()` i eksportuj obiekt API: `nowyZasobApi`
+
+## 6. Frontend — Context (jeśli stan globalny)
+
+- Stwórz `frontend/src/context/NowyZasobContext.tsx`
+- Provider: `useState` + `useCallback` + `useEffect` do ładowania danych
+- Hook: `useNowyZasob()` z guardem
+- Dodaj Provider do drzewa w `App.tsx`
+
+## 7. Frontend — Komponenty
+
+- Stwórz folder `frontend/src/components/NowyKomponent/`
+- Użyj istniejących primitywów: `Button`, `Modal`, `Input`, `Select`, etc.
+- Stylowanie: styled-components z theme, transient props z `$`
+- Formularze: kontrolowane pola, `handleSubmit` async z try/catch
+
+## 8. Frontend — Routing (jeśli nowa strona)
+
+- Dodaj `<Route>` w `App.tsx`
+
+## 9. Pamiętaj
+
+- Komunikaty błędów w API po polsku
+- Klucze JSON w snake_case
+- Nazwy komponentów/klas w PascalCase
+- Nazwy plików API/hooks w camelCase
+- Korzystaj z wartości theme zamiast hardkodowanych
+- Typuj wszystko (TypeScript strict)

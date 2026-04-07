@@ -1,0 +1,73 @@
+---
+description: Ogólne informacje o projekcie i architekturze
+globs:
+alwaysApply: true
+---
+
+# Projekt: Organizer / Notatnik
+
+Fullstackowa aplikacja typu organizer (notatki, artykuły, tablice Kanban, time tracker).
+
+## Architektura
+
+- **Backend:** PHP (Fat-Free Framework) + SQLite — folder `backend/`
+- **Frontend:** React 19 + TypeScript + Vite — folder `frontend/`
+- **Build/deploy:** `build.bat` buduje frontend i kopiuje backend do folderu `build/`
+- **Tutorial:** `tutorial/` — dokumentacja HTML (po polsku) opisująca budowę aplikacji
+
+## Struktura katalogów
+
+```
+notes/
+├── backend/
+│   ├── app/
+│   │   ├── Controllers/    # kontrolery API (1 klasa = 1 plik)
+│   │   ├── Models/         # modele DB\SQL\Mapper (1 klasa = 1 plik)
+│   │   └── config.ini      # konfiguracja F3
+│   ├── public/
+│   │   ├── index.php       # front controller: CORS, migracje, routing
+│   │   └── .htaccess
+│   ├── data/               # pliki SQLite (notes.db) — poza web root
+│   └── [pliki frameworka F3: base.php, web.php, db/, ...]
+├── frontend/
+│   ├── src/
+│   │   ├── api/            # moduły komunikacji z API (fetch)
+│   │   ├── components/     # komponenty React (folder per komponent)
+│   │   ├── context/        # React Context providers + hooki
+│   │   ├── hooks/          # custom hooki (useGetData, useSnackbar)
+│   │   ├── styles/         # theme.ts + GlobalStyles.ts
+│   │   ├── App.tsx         # główny komponent z routingiem i providerami
+│   │   ├── main.tsx        # entry point (BrowserRouter)
+│   │   └── config.ts       # API_BASE_URL z env
+│   ├── vite.config.ts
+│   ├── tsconfig.json
+│   └── package.json
+├── build.bat               # skrypt budujący do deploymentu
+└── tutorial/               # tutorial HTML (po polsku)
+```
+
+## Moduły funkcjonalne
+
+| Moduł | Frontend route | API prefix |
+|-------|---------------|------------|
+| Notatki | `/` | `/api/notes` |
+| Kategorie notatek | — (sidebar) | `/api/categories` |
+| Tablice (Kanban) | `/board/:boardId` | `/api/boards`, `/api/boards/:id/tasks` (alias: `/items`) |
+| Kategorie tablic | — (sidebar) | `/api/board-categories` |
+| Artykuły | `/articles/:articleId` | `/api/articles` |
+| Kategorie artykułów | — (sidebar) | `/api/article-categories` |
+| Time Tracker | `/time-tracker` | `/api/time/week`, `/api/time/tasks` |
+| Auth | — (modal) | `/api/auth/register`, `login`, `logout`, `me` |
+
+## Język
+
+- **Kod:** angielski (nazwy zmiennych, klas, funkcji, commitów)
+- **UI / komunikaty użytkownika:** polski (etykiety, komunikaty błędów, placeholdery)
+- **Komentarze w kodzie:** mix polski/angielski — preferuj angielski w nowym kodzie
+- **Tutorial:** polski
+
+## Uruchamianie (dev)
+
+- Backend: `php -S localhost:8080 -t backend/public` (lub XAMPP/WampServer)
+- Frontend: `cd frontend && npm run dev` (Vite dev server z proxy `/api` → localhost:8080)
+- Build: `build.bat` (pyta o subfolder, buduje do `build/`)
