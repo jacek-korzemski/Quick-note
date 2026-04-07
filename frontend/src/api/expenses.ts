@@ -41,6 +41,12 @@ export interface MonthData {
   summary: ExpenseSummary;
 }
 
+export interface MonthStripEntry {
+  month: string;
+  items_count: number;
+  total_amount: number;
+}
+
 interface ApiError {
   error: string;
 }
@@ -68,6 +74,11 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const expensesApi = {
+  getStrip(from: string, to: string) {
+    const params = new URLSearchParams({ from, to });
+    return request<{ months: MonthStripEntry[] }>(`/strip?${params}`);
+  },
+
   getMonth(month: string) {
     const params = new URLSearchParams({ month });
     return request<MonthData>(`/month?${params}`);

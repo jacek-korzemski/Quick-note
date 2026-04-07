@@ -292,6 +292,7 @@ $f3->route('POST   /api/time/tasks', 'TimeTrackerController->createTask');
 $f3->route('PATCH  /api/time/tasks/@id', 'TimeTrackerController->updateTask');
 $f3->route('DELETE /api/time/tasks/@id', 'TimeTrackerController->deleteTask');
 
+$f3->route('GET    /api/expenses/strip', 'ExpenseController->strip');
 $f3->route('GET    /api/expenses/month', 'ExpenseController->month');
 $f3->route('POST   /api/expenses/categories', 'ExpenseController->createCategory');
 $f3->route('PUT    /api/expenses/categories/reorder', 'ExpenseController->reorderCategories');

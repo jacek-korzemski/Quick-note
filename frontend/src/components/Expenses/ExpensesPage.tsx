@@ -17,6 +17,7 @@ import { Button } from '@/components/Button/Button';
 import Input from '@/components/Form/Input';
 import Textarea from '@/components/Form/Textarea';
 import { Select } from '@/components/Form/Select';
+import MonthStrip from './MonthStrip';
 
 const COLOR_OPTIONS = [
   { value: 'none', label: 'Domyślny' },
@@ -81,6 +82,35 @@ const HeaderRow = styled.div`
 const NavButtons = styled.div`
   display: flex;
   gap: ${({ theme }) => theme.spacing.sm};
+`;
+
+const ToggleStripButton = styled.button<{ $open: boolean }>`
+  background: none;
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  border-radius: ${({ theme }) => theme.borderRadius.sm};
+  color: ${({ theme }) => theme.colors.textSecondary};
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  transition: color ${({ theme }) => theme.transitions.fast},
+              background ${({ theme }) => theme.transitions.fast},
+              transform ${({ theme }) => theme.transitions.fast};
+
+  &:hover {
+    color: ${({ theme }) => theme.colors.textLight};
+    background: ${({ theme }) => theme.colors.surfaceHover};
+  }
+
+  svg {
+    width: 14px;
+    height: 14px;
+    transition: transform 300ms cubic-bezier(0.4, 0, 0.2, 1);
+    transform: rotate(${({ $open }) => ($open ? '180deg' : '0deg')});
+  }
 `;
 
 const MonthLabel = styled.h2`
@@ -343,10 +373,15 @@ function DraggableCategory({
 const ExpensesPage: React.FC = () => {
   const {
     currentMonth, categories, summary, loading, error,
-    goToPrevMonth, goToNextMonth, goToCurrentMonth,
+    setMonth, goToPrevMonth, goToNextMonth, goToCurrentMonth,
     createCategory, updateCategory, deleteCategory, reorderCategories,
     createItem, updateItem, deleteItem,
   } = useExpenses();
+
+  // Month strip
+  const [isStripOpen, setIsStripOpen] = useState(true);
+  const [stripRefreshKey, setStripRefreshKey] = useState(0);
+  const bumpStrip = useCallback(() => setStripRefreshKey((k) => k + 1), []);
 
   // Category form
   const [catModalOpen, setCatModalOpen] = useState(false);
@@ -437,12 +472,13 @@ const ExpensesPage: React.FC = () => {
         await createCategory({ name: catName.trim(), color: catColor });
       }
       setCatModalOpen(false);
+      bumpStrip();
     } catch {
       // error handled by context
     } finally {
       setCatSaving(false);
     }
-  }, [catName, catColor, editingCat, createCategory, updateCategory]);
+  }, [catName, catColor, editingCat, createCategory, updateCategory, bumpStrip]);
 
   // --- Item modal ---
 
@@ -488,12 +524,13 @@ const ExpensesPage: React.FC = () => {
         });
       }
       setItemModalOpen(false);
+      bumpStrip();
     } catch {
       // error handled by context
     } finally {
       setItemSaving(false);
     }
-  }, [itemName, itemDesc, itemDay, itemAmount, itemCategoryId, editingItem, createItem, updateItem]);
+  }, [itemName, itemDesc, itemDay, itemAmount, itemCategoryId, editingItem, createItem, updateItem, bumpStrip]);
 
   // --- Delete handlers ---
 
@@ -503,12 +540,13 @@ const ExpensesPage: React.FC = () => {
     try {
       await deleteCategory(deleteCatId);
       setDeleteCatId(null);
+      bumpStrip();
     } catch {
       // error
     } finally {
       setDeleting(false);
     }
-  }, [deleteCatId, deleteCategory]);
+  }, [deleteCatId, deleteCategory, bumpStrip]);
 
   const handleDeleteItem = useCallback(async () => {
     if (deleteItemId === null) return;
@@ -516,18 +554,28 @@ const ExpensesPage: React.FC = () => {
     try {
       await deleteItem(deleteItemId);
       setDeleteItemId(null);
+      bumpStrip();
     } catch {
       // error
     } finally {
       setDeleting(false);
     }
-  }, [deleteItemId, deleteItem]);
+  }, [deleteItemId, deleteItem, bumpStrip]);
 
   return (
     <Wrapper>
       {/* Header with month navigation */}
       <HeaderRow>
         <MonthLabel>{formatMonthLabel(currentMonth)}</MonthLabel>
+        <ToggleStripButton
+          $open={isStripOpen}
+          onClick={() => setIsStripOpen((v) => !v)}
+          title={isStripOpen ? 'Ukryj timeline' : 'Rozwiń timeline'}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </ToggleStripButton>
         <NavButtons>
           <Button variant="secondary" size="sm" onClick={goToPrevMonth}>
             &#8592;
@@ -540,6 +588,14 @@ const ExpensesPage: React.FC = () => {
           </Button>
         </NavButtons>
       </HeaderRow>
+
+      {/* Month strip */}
+      <MonthStrip
+        open={isStripOpen}
+        currentMonth={currentMonth}
+        onSelectMonth={setMonth}
+        refreshKey={stripRefreshKey}
+      />
 
       {/* Add category button -- at the top */}
       {!loading && (

@@ -37,6 +37,60 @@ class ExpenseController {
     }
 
     /**
+     * GET /api/expenses/strip?from=YYYY-MM&to=YYYY-MM
+     */
+    public function strip(\Base $f3): void {
+        $user = $this->getCurrentUser($f3);
+        if (!$user) {
+            $this->json($f3, ['error' => 'Brak autoryzacji.'], 401);
+            return;
+        }
+
+        $from = $f3->get('GET.from');
+        $to   = $f3->get('GET.to');
+        if (!$from || !preg_match('/^\d{4}-\d{2}$/', $from)) {
+            $from = date('Y-m', strtotime('-6 months'));
+        }
+        if (!$to || !preg_match('/^\d{4}-\d{2}$/', $to)) {
+            $to = date('Y-m', strtotime('+5 months'));
+        }
+
+        /** @var \DB\SQL $db */
+        $db = $f3->get('DB');
+        $rows = $db->exec(
+            'SELECT month, COUNT(*) AS items_count, COALESCE(SUM(amount), 0) AS total_amount
+             FROM expense_items
+             WHERE user_id = ? AND month >= ? AND month <= ?
+             GROUP BY month',
+            [(int) $user->id, $from, $to]
+        );
+
+        $dataByMonth = [];
+        foreach ($rows as $row) {
+            $dataByMonth[$row['month']] = [
+                'month'       => $row['month'],
+                'items_count' => (int) $row['items_count'],
+                'total_amount' => (float) $row['total_amount'],
+            ];
+        }
+
+        $months = [];
+        $current = new DateTime($from . '-01');
+        $end     = new DateTime($to . '-01');
+        while ($current <= $end) {
+            $m = $current->format('Y-m');
+            $months[] = $dataByMonth[$m] ?? [
+                'month'        => $m,
+                'items_count'  => 0,
+                'total_amount' => 0,
+            ];
+            $current->modify('+1 month');
+        }
+
+        $this->json($f3, ['months' => $months]);
+    }
+
+    /**
      * GET /api/expenses/month?month=YYYY-MM
      */
     public function month(\Base $f3): void {
