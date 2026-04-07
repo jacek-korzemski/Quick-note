@@ -10,21 +10,19 @@ const MONTH_NAMES_SHORT = [
 
 const CARD_WIDTH = 116;
 const CARD_GAP = 6;
-const RANGE_HALF = 12;
+const CARD_STEP = CARD_WIDTH + CARD_GAP;
+const VISIBLE_HALF = 10;
 
-function formatMonth(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  return `${y}-${m}`;
+function fmtMonth(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
 
-function shiftMonthStr(month: string, delta: number): string {
+function shiftMonth(month: string, delta: number): string {
   const [y, m] = month.split('-').map(Number);
-  const d = new Date(y, m - 1 + delta, 1);
-  return formatMonth(d);
+  return fmtMonth(new Date(y, m - 1 + delta, 1));
 }
 
-function parseMonthLabel(month: string): { short: string; year: string } {
+function monthLabel(month: string): { short: string; year: string } {
   const [y, m] = month.split('-').map(Number);
   return { short: MONTH_NAMES_SHORT[m - 1], year: String(y) };
 }
@@ -111,14 +109,17 @@ export default function MonthStrip({ open, currentMonth, onSelectMonth, refreshK
   const { user } = useAuth();
   const trackRef = useRef<HTMLDivElement>(null);
   const [entries, setEntries] = useState<MonthStripEntry[]>([]);
-  const [rangeFrom, setRangeFrom] = useState(() => shiftMonthStr(currentMonth, -RANGE_HALF));
-  const [rangeTo, setRangeTo] = useState(() => shiftMonthStr(currentMonth, RANGE_HALF));
+  const initialScrollDone = useRef(false);
+  const lastLoadedMonth = useRef(currentMonth);
 
-  // drag-scroll state
-  const dragging = useRef(false);
+  // drag-scroll
+  const isDragging = useRef(false);
   const [grabbing, setGrabbing] = useState(false);
   const dragStart = useRef({ x: 0, scrollLeft: 0 });
   const didDrag = useRef(false);
+
+  const rangeFrom = shiftMonth(currentMonth, -VISIBLE_HALF);
+  const rangeTo = shiftMonth(currentMonth, VISIBLE_HALF);
 
   const load = useCallback(async (from: string, to: string) => {
     if (!user) return;
@@ -134,33 +135,24 @@ export default function MonthStrip({ open, currentMonth, onSelectMonth, refreshK
     load(rangeFrom, rangeTo);
   }, [rangeFrom, rangeTo, load, refreshKey]);
 
-  // scroll to active month on mount / month change
+  // Scroll to active card -- instant on first paint, smooth on subsequent month changes
   useEffect(() => {
     if (!trackRef.current || !entries.length) return;
     const idx = entries.findIndex((e) => e.month === currentMonth);
     if (idx < 0) return;
-    const target = idx * (CARD_WIDTH + CARD_GAP) - trackRef.current.clientWidth / 2 + CARD_WIDTH / 2;
-    trackRef.current.scrollTo({ left: target, behavior: 'smooth' });
+    const target = idx * CARD_STEP - trackRef.current.clientWidth / 2 + CARD_WIDTH / 2;
+
+    if (!initialScrollDone.current || lastLoadedMonth.current !== currentMonth) {
+      const isFirstPaint = !initialScrollDone.current;
+      initialScrollDone.current = true;
+      lastLoadedMonth.current = currentMonth;
+      trackRef.current.scrollTo({ left: target, behavior: isFirstPaint ? 'instant' : 'smooth' });
+    }
   }, [currentMonth, entries]);
 
-  // expand range when scrolling near edges
-  const handleScroll = useCallback(() => {
-    const el = trackRef.current;
-    if (!el || !entries.length) return;
-    const threshold = CARD_WIDTH * 2;
-    if (el.scrollLeft < threshold) {
-      const newFrom = shiftMonthStr(rangeFrom, -6);
-      setRangeFrom(newFrom);
-    }
-    if (el.scrollWidth - el.scrollLeft - el.clientWidth < threshold) {
-      const newTo = shiftMonthStr(rangeTo, 6);
-      setRangeTo(newTo);
-    }
-  }, [entries, rangeFrom, rangeTo]);
-
-  // --- drag scroll handlers ---
+  // --- drag scroll ---
   const onMouseDown = useCallback((e: React.MouseEvent) => {
-    dragging.current = true;
+    isDragging.current = true;
     didDrag.current = false;
     setGrabbing(true);
     dragStart.current = { x: e.clientX, scrollLeft: trackRef.current?.scrollLeft ?? 0 };
@@ -168,13 +160,13 @@ export default function MonthStrip({ open, currentMonth, onSelectMonth, refreshK
 
   useEffect(() => {
     const onMouseMove = (e: MouseEvent) => {
-      if (!dragging.current || !trackRef.current) return;
+      if (!isDragging.current || !trackRef.current) return;
       const dx = e.clientX - dragStart.current.x;
       if (Math.abs(dx) > 4) didDrag.current = true;
       trackRef.current.scrollLeft = dragStart.current.scrollLeft - dx;
     };
     const onMouseUp = () => {
-      dragging.current = false;
+      isDragging.current = false;
       setGrabbing(false);
     };
     window.addEventListener('mousemove', onMouseMove);
@@ -196,10 +188,9 @@ export default function MonthStrip({ open, currentMonth, onSelectMonth, refreshK
         ref={trackRef}
         $grabbing={grabbing}
         onMouseDown={onMouseDown}
-        onScroll={handleScroll}
       >
         {entries.map((entry) => {
-          const { short, year } = parseMonthLabel(entry.month);
+          const { short, year } = monthLabel(entry.month);
           const active = entry.month === currentMonth;
           return (
             <Card

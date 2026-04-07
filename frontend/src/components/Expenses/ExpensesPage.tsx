@@ -77,6 +77,7 @@ const HeaderRow = styled.div`
   align-items: center;
   justify-content: space-between;
   gap: ${({ theme }) => theme.spacing.sm};
+  position: relative;
 `;
 
 const NavButtons = styled.div`
@@ -85,6 +86,10 @@ const NavButtons = styled.div`
 `;
 
 const ToggleStripButton = styled.button<{ $open: boolean }>`
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
   background: none;
   border: 1px solid ${({ theme }) => theme.colors.border};
   border-radius: ${({ theme }) => theme.borderRadius.sm};
@@ -96,9 +101,9 @@ const ToggleStripButton = styled.button<{ $open: boolean }>`
   width: 28px;
   height: 28px;
   padding: 0;
+  z-index: 1;
   transition: color ${({ theme }) => theme.transitions.fast},
-              background ${({ theme }) => theme.transitions.fast},
-              transform ${({ theme }) => theme.transitions.fast};
+              background ${({ theme }) => theme.transitions.fast};
 
   &:hover {
     color: ${({ theme }) => theme.colors.textLight};
