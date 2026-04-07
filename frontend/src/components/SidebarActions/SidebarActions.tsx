@@ -421,6 +421,7 @@ const SidebarActions = () => {
 
   const isNotesSectionActive = location.pathname === '/';
   const isTimeTrackerActive = location.pathname.startsWith('/time-tracker');
+  const isExpensesActive = location.pathname.startsWith('/expenses');
 
   const refreshBoards = useCallback(async () => {
     if (!user) return;
@@ -690,6 +691,11 @@ const SidebarActions = () => {
             label="Time Tracker"
             onClick={() => navigate('/time-tracker')}
             selected={isTimeTrackerActive}
+          />
+          <TreeItem
+            label="Wydatki"
+            onClick={() => navigate('/expenses')}
+            selected={isExpensesActive}
           />
         </SectionContent>
       </SidebarSection>

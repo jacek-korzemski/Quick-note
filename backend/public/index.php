@@ -99,6 +99,30 @@ $db->exec([
         FOREIGN KEY (user_id) REFERENCES users(id),
         FOREIGN KEY (task_id) REFERENCES time_tasks(id)
     )",
+    "CREATE TABLE IF NOT EXISTS expense_categories (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        color TEXT NOT NULL DEFAULT 'none',
+        created_month TEXT NOT NULL,
+        deleted_month TEXT,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    )",
+    "CREATE TABLE IF NOT EXISTS expense_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        category_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT,
+        day INTEGER NOT NULL,
+        month TEXT NOT NULL,
+        amount REAL NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT,
+        FOREIGN KEY (category_id) REFERENCES expense_categories(id),
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    )",
     "CREATE TABLE IF NOT EXISTS article_categories (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
@@ -156,6 +180,13 @@ try {
 }
 try {
     $db->exec("ALTER TABLE boards ADD COLUMN archived_at TEXT");
+} catch (Exception $e) {
+    if (strpos($e->getMessage(), 'duplicate column name') === false) {
+        throw $e;
+    }
+}
+try {
+    $db->exec("ALTER TABLE expense_categories ADD COLUMN position INTEGER NOT NULL DEFAULT 0");
 } catch (Exception $e) {
     if (strpos($e->getMessage(), 'duplicate column name') === false) {
         throw $e;
@@ -260,5 +291,14 @@ $f3->route('GET    /api/time/week', 'TimeTrackerController->week');
 $f3->route('POST   /api/time/tasks', 'TimeTrackerController->createTask');
 $f3->route('PATCH  /api/time/tasks/@id', 'TimeTrackerController->updateTask');
 $f3->route('DELETE /api/time/tasks/@id', 'TimeTrackerController->deleteTask');
+
+$f3->route('GET    /api/expenses/month', 'ExpenseController->month');
+$f3->route('POST   /api/expenses/categories', 'ExpenseController->createCategory');
+$f3->route('PUT    /api/expenses/categories/reorder', 'ExpenseController->reorderCategories');
+$f3->route('PUT    /api/expenses/categories/@id', 'ExpenseController->updateCategory');
+$f3->route('DELETE /api/expenses/categories/@id', 'ExpenseController->deleteCategory');
+$f3->route('POST   /api/expenses/items', 'ExpenseController->createItem');
+$f3->route('PUT    /api/expenses/items/@id', 'ExpenseController->updateItem');
+$f3->route('DELETE /api/expenses/items/@id', 'ExpenseController->deleteItem');
 
 $f3->run();

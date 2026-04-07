@@ -271,7 +271,7 @@ export const Dropdown = styled.div<{ $x: number; $y: number; $width: number; $zI
   border: 1px solid ${({ theme }) => theme.colors.border};
   border-radius: ${({ theme }) => theme.borderRadius.md};
   box-shadow: ${({ theme }) => theme.shadows.lg};
-  z-index: ${({ theme, $zIndex }) => $zIndex ?? theme.zIndex.dropdown};
+  z-index: ${({ theme, $zIndex }) => $zIndex ?? theme.zIndex.popover};
   padding: ${({ theme }) => theme.spacing.xs} 0;
 `;
 

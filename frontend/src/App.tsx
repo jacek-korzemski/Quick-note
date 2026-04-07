@@ -18,6 +18,8 @@ import NotesContent from "@/components/NotesContent/NotesContent";
 import BoardView from "@/components/BoardView/BoardView";
 import TimeTrackerPage from "@/components/TimeTracker/TimeTrackerPage";
 import ArticlePage from "@/components/Articles/ArticlePage";
+import ExpensesPage from "@/components/Expenses/ExpensesPage";
+import { ExpensesProvider } from "@/context/ExpensesContext";
 
 const App: React.FC = () => {
   return (
@@ -31,6 +33,7 @@ const App: React.FC = () => {
                 <ArticleCategoriesProvider>
                   <ArticlesProvider>
                     <TimeTrackerProvider>
+                    <ExpensesProvider>
                   <SidebarLayout
                     leftSidebar={
                       <Sidebar
@@ -51,9 +54,11 @@ const App: React.FC = () => {
                       <Route path="/" element={<NotesContent />} />
                       <Route path="/board/:boardId" element={<BoardView />} />
                       <Route path="/time-tracker" element={<TimeTrackerPage />} />
+                      <Route path="/expenses" element={<ExpensesPage />} />
                       <Route path="/articles/:articleId" element={<ArticlePage />} />
                     </Routes>
                   </SidebarLayout>
+                    </ExpensesProvider>
                     </TimeTrackerProvider>
                   </ArticlesProvider>
                 </ArticleCategoriesProvider>
