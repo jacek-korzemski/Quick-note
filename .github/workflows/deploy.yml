@@ -1,0 +1,80 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Build and upload
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend
+        working-directory: frontend
+        env:
+          VITE_BASE: /
+          VITE_API_BASE: /backend/public
+          VITE_OUT_DIR: ../build
+        run: |
+          npm ci
+          npm run build
+
+      - name: Assemble package
+        run: |
+          rsync -a --exclude='*.db' --exclude='*.sqlite' --exclude='*.sqlite3' backend/ build/backend/
+          mkdir -p build/backend/data
+          touch build/backend/data/.gitkeep
+          cat > build/.htaccess << 'EOF'
+          RewriteEngine On
+          RewriteBase /
+
+          # API lives under backend/; leave those requests for backend/public/.htaccess
+          RewriteRule ^backend/ - [L]
+
+          RewriteCond %{REQUEST_FILENAME} -f [OR]
+          RewriteCond %{REQUEST_FILENAME} -d
+          RewriteRule ^ - [L]
+
+          RewriteRule ^ index.html [L]
+          EOF
+
+      - name: Resolve remote directory
+        id: remote
+        env:
+          FTP_SERVER_DIR: ${{ secrets.FTP_SERVER_DIR }}
+        run: |
+          dir="${FTP_SERVER_DIR}"
+          dir="${dir#/}"
+          dir="${dir%/}"
+          if [ -z "$dir" ] || [ "$dir" = "." ]; then
+            echo "dir=./" >> "$GITHUB_OUTPUT"
+          else
+            echo "dir=${dir}/" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload over FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.4.0
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USER }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: build/
+          server-dir: ${{ steps.remote.outputs.dir }}
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/node_modules/**
+            **/*.db
+            **/*.sqlite
+            **/*.sqlite3
